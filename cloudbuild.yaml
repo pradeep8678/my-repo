@@ -1,8 +1,21 @@
 steps:
+  # Step 1: Build Docker image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/IMAGE_NAME:latest', '.']
+    args:
+      [
+        'build',
+        '-t',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
+        '.'
+      ]
+
+  # Step 2: Push Docker image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/IMAGE_NAME:latest']
+    args:
+      [
+        'push',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+      ]
 
 images:
-  - 'LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/IMAGE_NAME:latest'
+  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

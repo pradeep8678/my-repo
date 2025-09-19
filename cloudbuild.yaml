@@ -1,7 +1,6 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
-
 steps:
   # Step 1: Build Docker image
   - name: 'gcr.io/cloud-builders/docker'
@@ -20,6 +19,46 @@ steps:
         'push',
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
       ]
+
+  # Step 3: Create new instance template with startup script
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud compute instance-templates create my-template \
+          --machine-type=e2-small \
+          --tags=http-server,https-server \
+          --metadata-from-file=startup-script=script.sh \
+          --quiet
+
+  # Step 4: Rolling update MIG to new template
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        MIG_NAME="my-app"
+        gcloud compute instance-groups managed rolling-action start-update $MIG_NAME \
+          --version=template=my-template \
+          --region=us-central1 \
+          --type=proactive \
+          --max-surge=1 \
+          --max-unavailable=0 \
+          --quiet
+
+  # Step 5: Delete old instance template
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        OLD_TEMPLATE=$(gcloud compute instance-templates list \
+          --filter="name!=my-template" \
+          --format="value(name)")
+        if [ ! -z "$OLD_TEMPLATE" ]; then
+          gcloud compute instance-templates delete $OLD_TEMPLATE --quiet
+        fi
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

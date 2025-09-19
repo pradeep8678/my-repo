@@ -46,17 +46,17 @@ steps:
           --max-unavailable=0 \
           --quiet
 
-  # Step 5: Delete old instance template
+  # Step 5: Delete old instance template (single command in bash)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        OLD_TEMPLATE=$(gcloud compute instance-templates list \
+        old_template=$(gcloud compute instance-templates list \
           --filter="name!=my-template" \
           --format="value(name)" | head -n 1)
-        if [ ! -z "$OLD_TEMPLATE" ]; then
-          gcloud compute instance-templates delete $OLD_TEMPLATE --quiet
+        if [ -n "$old_template" ]; then
+          gcloud compute instance-templates delete "$old_template" --quiet
         fi
 
 images:

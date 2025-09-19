@@ -1,5 +1,27 @@
-gcloud compute instance-templates create $TEMPLATE_NAME \
-  --machine-type=n1-standard-1 \
-  --image-family=debian-12 \
-  --image-project=debian-cloud \
-  --metadata-from-file=startup-script=startup.sh
+steps:
+# Step 1: Build Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    [
+      'build',
+      '-t',
+      'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
+      '.'
+    ]
+
+# Step 2: Push Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    [
+      'push',
+      'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+    ]
+
+# Step 3: Update MIG
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  args:
+    - './update-mig.sh'
+
+images:
+  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

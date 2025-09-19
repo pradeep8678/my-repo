@@ -1,62 +1,25 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
-substitutions:
-  _REGION: "us-central1"
-  _ZONE: "us-central1-c"
-  _REPO: "artifact-repo"
-  _IMAGE: "simple-web-app"
-  _MIG_NAME: "my-app-mig"
 
 steps:
-# Step 0: Build Docker image
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    [
-      "build",
-      "-t",
-      "asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID",
-      "."
-    ]
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
+        '.'
+      ]
 
-# Step 1: Push image to Artifact Registry
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    [
-      "push",
-      "asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID"
-    ]
+  # Step 2: Push Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'push',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+      ]
 
-# Step 2: Create instance template with startup script
-- name: 'gcr.io/cloud-builders/gcloud'
-  args:
-    - compute
-    - instance-templates
-    - create
-    - $_IMAGE-template-$BUILD_ID
-    - --machine-type=e2-medium
-    - --boot-disk-size=20GB
-    - --tags=http-server
-    - |
-      --metadata=startup-script=#!/bin/bash
-      set -e
-      echo "Running startup script..."
-
-      # Authenticate Docker with Artifact Registry
-      gcloud auth configure-docker asia-south1-docker.pkg.dev -q
-
-      # Pull and run this build's image
-      docker pull asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
-      docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
-
-# Step 3: Rolling update MIG to use the new template
-- name: 'gcr.io/cloud-builders/gcloud'
-  args:
-    - compute
-    - instance-groups
-    - managed
-    - rolling-action
-    - start-update
-    - $_MIG_NAME
-    - --version=template=$_IMAGE-template-$BUILD_ID
-    - --zone=$_ZONE
+images:
+  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

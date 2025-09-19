@@ -37,13 +37,13 @@ steps:
           --tags=http-server,https-server \
           --quiet
 
-        # Step 4: Start rolling update in MIG
+        # Step 4: Start rolling update in MIG (proactive, replace all old instances)
         gcloud compute instance-groups managed rolling-action start-update my-app \
           --version=template=$TEMPLATE_NAME \
           --zone=$_ZONE \
           --type=proactive \
           --max-surge=1 \
-          --max-unavailable=0 \
+          --max-unavailable=1 \
           --quiet
 
 images:

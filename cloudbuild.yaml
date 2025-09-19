@@ -20,13 +20,29 @@ steps:
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
       ]
 
-  # Step 3: Trigger a rolling update of the Managed Instance Group (MIG)
+  # Step 3: Create new instance template and update MIG
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        gcloud compute instance-groups managed rolling-action restart my-app-mig --zone=asia-south1-a
+        echo "🔹 Creating new instance template..."
+        TEMPLATE_NAME="my-app-template-$(date +%Y%m%d%H%M%S)"
+
+        gcloud compute instance-templates create-with-container $TEMPLATE_NAME \
+          --machine-type=e2-medium \
+          --boot-disk-size=20GB \
+          --container-image=asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest
+
+        echo "🔹 Updating MIG to use new template..."
+        gcloud compute instance-groups managed set-instance-template app-backend \
+          --template=$TEMPLATE_NAME \
+          --zone=us-central1-c
+
+        echo "🔹 Starting rolling update..."
+        gcloud compute instance-groups managed rolling-action start-update app-backend \
+          --version=template=$TEMPLATE_NAME \
+          --zone=us-central1-c
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

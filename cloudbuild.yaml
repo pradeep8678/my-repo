@@ -42,7 +42,7 @@ steps:
         'managed',
         'rolling-action',
         'start-update',
-        'app-backend',
+        'my-app-mig',
         '--version=template=my-app-template-$BUILD_ID',
         '--zone=us-central1-c'
       ]

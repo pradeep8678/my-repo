@@ -2,29 +2,49 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-# Step 1: Build Docker image
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    [
-      'build',
-      '-t',
-      'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
-      '.'
-    ]
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
+        '.'
+      ]
 
-# Step 2: Push Docker image
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    [
-      'push',
-      'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
-    ]
+  # Step 2: Push Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'push',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+      ]
 
-# Step 3: Update MIG
-- name: 'gcr.io/cloud-builders/gcloud'
-  entrypoint: 'bash'
-  args:
-    - './update-mig.sh'
+  # Step 3: Create a new instance template
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      [
+        'compute',
+        'instance-templates',
+        'create',
+        'simple-web-app-template-${SHORT_SHA}',
+        '--machine-type=n1-standard-1',
+        '--metadata-from-file=startup-script=update-mig.sh'
+      ]
+
+  # Step 4: Rolling update on regional MIG
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      [
+        'compute',
+        'instance-groups',
+        'managed',
+        'rolling-action',
+        'start-update',
+        'myy-app-group',
+        '--version=template=simple-web-app-template-${SHORT_SHA}',
+        '--region=us-central1'
+      ]
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

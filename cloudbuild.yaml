@@ -21,7 +21,7 @@ steps:
       ]
 
   # Step 3: Trigger a rolling update of the Managed Instance Group (MIG)
-  - name: 'gcr.io/google.com/cloudsdk/cloud-sdk'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'

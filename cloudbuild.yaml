@@ -27,24 +27,36 @@ steps:
       "asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID"
     ]
 
-# Step 2: Create instance template with startup script using this build's image
+# Step 2: Create instance template with startup script
 - name: 'gcr.io/cloud-builders/gcloud'
   args:
-    [
-      "compute", "instance-templates", "create",
-      "$_IMAGE-template-$BUILD_ID",
-      "--machine-type=e2-medium",
-      "--boot-disk-size=20GB",
-      "--tags=http-server",
-      "--metadata=startup-script=#\!/bin/bash\nset -e\n\n# Authenticate Docker with Artifact Registry\ngcloud auth configure-docker asia-south1-docker.pkg.dev -q\n\n# Pull this build's image\ndocker pull asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID\n\n# Run the container\ndocker run -d -p 8080:8080 asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID"
-    ]
+    - compute
+    - instance-templates
+    - create
+    - $_IMAGE-template-$BUILD_ID
+    - --machine-type=e2-medium
+    - --boot-disk-size=20GB
+    - --tags=http-server
+    - --metadata=startup-script=|
+        #!/bin/bash
+        set -e
+        echo "Running startup script..."
+
+        # Authenticate Docker with Artifact Registry
+        gcloud auth configure-docker asia-south1-docker.pkg.dev -q
+
+        # Pull and run this build's image
+        docker pull asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
+        docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
 
 # Step 3: Rolling update MIG to use the new template
 - name: 'gcr.io/cloud-builders/gcloud'
   args:
-    [
-      "compute", "instance-groups", "managed", "rolling-action", "start-update",
-      "$_MIG_NAME",
-      "--version=template=$_IMAGE-template-$BUILD_ID",
-      "--zone=$_ZONE"
-    ]
+    - compute
+    - instance-groups
+    - managed
+    - rolling-action
+    - start-update
+    - $_MIG_NAME
+    - --version=template=$_IMAGE-template-$BUILD_ID
+    - --zone=$_ZONE

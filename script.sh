@@ -31,8 +31,12 @@ systemctl start docker
 # --- Authenticate Docker with Artifact Registry ---
 gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
-# --- Pull latest image ---
-docker pull asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest
+# --- Get COMMIT_SHA from instance metadata ---
+IMAGE_TAG=$(curl -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/instance/attributes/COMMIT_SHA)
+
+# --- Pull the Docker image for this build ---
+docker pull asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$IMAGE_TAG
 
 # --- Remove any existing container (safe cleanup) ---
 docker rm -f simple-web-app || true
@@ -42,4 +46,4 @@ docker run -d \
   --restart=always \
   --name simple-web-app \
   -p 80:8080 \
-  asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest
+  asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$IMAGE_TAG

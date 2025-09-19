@@ -37,17 +37,17 @@ steps:
     - --machine-type=e2-medium
     - --boot-disk-size=20GB
     - --tags=http-server
-    - --metadata=startup-script=|
-        #!/bin/bash
-        set -e
-        echo "Running startup script..."
+    - |
+      --metadata=startup-script=#!/bin/bash
+      set -e
+      echo "Running startup script..."
 
-        # Authenticate Docker with Artifact Registry
-        gcloud auth configure-docker asia-south1-docker.pkg.dev -q
+      # Authenticate Docker with Artifact Registry
+      gcloud auth configure-docker asia-south1-docker.pkg.dev -q
 
-        # Pull and run this build's image
-        docker pull asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
-        docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
+      # Pull and run this build's image
+      docker pull asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
+      docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/$PROJECT_ID/$_REPO/$_IMAGE:$BUILD_ID
 
 # Step 3: Rolling update MIG to use the new template
 - name: 'gcr.io/cloud-builders/gcloud'

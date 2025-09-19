@@ -8,7 +8,7 @@ steps:
       [
         'build',
         '-t',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$BUILD_ID',
         '.'
       ]
 
@@ -17,32 +17,37 @@ steps:
     args:
       [
         'push',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$BUILD_ID'
       ]
 
-  # Step 3: Create new instance template and update MIG
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'bash'
+  # Step 3: Create a new instance template using this build’s ID
+  - name: 'gcr.io/cloud-builders/gcloud'
     args:
-      - '-c'
-      - |
-        echo "🔹 Creating new instance template..."
-        TEMPLATE_NAME="my-app-template-$(date +%Y%m%d%H%M%S)"
+      [
+        'compute',
+        'instance-templates',
+        'create-with-container',
+        'my-app-template-$BUILD_ID',
+        '--machine-type=e2-medium',
+        '--boot-disk-size=20GB',
+        '--container-image=asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$BUILD_ID'
+      ]
 
-        gcloud compute instance-templates create-with-container "$TEMPLATE_NAME" \
-          --machine-type=e2-medium \
-          --boot-disk-size=20GB \
-          --container-image=asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest
-
-        echo "🔹 Updating MIG to use new template..."
-        gcloud compute instance-groups managed set-instance-template app-backend \
-          --template="$TEMPLATE_NAME" \
-          --zone=us-central1-c
-
-        echo "🔹 Starting rolling update..."
-        gcloud compute instance-groups managed rolling-action start-update app-backend \
-          --version=template="$TEMPLATE_NAME" \
-          --zone=us-central1-c
+  # Step 4: Update MIG with rolling update
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      [
+        'compute',
+        'instance-groups',
+        'managed',
+        'rolling-action',
+        'start-update',
+        'app-backend',
+        '--version=template=my-app-template-$BUILD_ID',
+        '--zone=us-central1-c'
+      ]
 
 images:
-  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$BUILD_ID'
+
+timeout: '1200s'

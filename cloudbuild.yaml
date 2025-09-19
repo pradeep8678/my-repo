@@ -1,14 +1,17 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
+substitutions:
+  _ZONE: "us-central1-c"
+
 steps:
-  # Step 1: Build Docker image
+  # Step 1: Build Docker image with commit SHA tag
   - name: 'gcr.io/cloud-builders/docker'
     args:
       [
         'build',
         '-t',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA',
         '.'
       ]
 
@@ -17,14 +20,31 @@ steps:
     args:
       [
         'push',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
       ]
 
-  # Step 3: Deploy via script (call bash explicitly)
+  # Step 3: Create a new instance template with metadata
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
-      - './deploy.sh'
+      - '-c'
+      - |
+        TEMPLATE_NAME="my-template-$RANDOM"
+        gcloud compute instance-templates create $TEMPLATE_NAME \
+          --machine-type=e2-small \
+          --metadata=COMMIT_SHA=$COMMIT_SHA \
+          --metadata-from-file=startup-script=script.sh \
+          --tags=http-server,https-server \
+          --quiet
+
+        # Step 4: Start rolling update in MIG
+        gcloud compute instance-groups managed rolling-action start-update my-app \
+          --version=template=$TEMPLATE_NAME \
+          --zone=$_ZONE \
+          --type=proactive \
+          --max-surge=1 \
+          --max-unavailable=0 \
+          --quiet
 
 images:
-  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
+  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'

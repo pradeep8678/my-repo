@@ -20,50 +20,52 @@ steps:
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
       ]
 
-  # Step 3: Create new instance template with unique name
+  # Step 3: Create a new instance template with unique name
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        MY_TEMPLATE="my-template-$(date +%s)"
-        echo "Using instance template: $MY_TEMPLATE"
-        gcloud compute instance-templates create "$MY_TEMPLATE" \
+        # Generate unique template name
+        TEMPLATE_NAME="my-template-$(date +%s)"
+        echo "Creating instance template: $TEMPLATE_NAME"
+        gcloud compute instance-templates create "$TEMPLATE_NAME" \
           --machine-type=e2-small \
           --tags=http-server,https-server \
           --metadata-from-file=startup-script=script.sh \
           --quiet
-        echo $MY_TEMPLATE > template_name.txt
+        # Save template name to a file for the next step
+        echo "$TEMPLATE_NAME" > template_name.txt
 
-  # Step 4: Rolling update MIG (zonal) to new template
+  # Step 4: Rolling update MIG to the new template
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        MY_TEMPLATE=$(cat template_name.txt)
-        echo "Rolling update MIG my-app to template $MY_TEMPLATE"
+        TEMPLATE_NAME=$(cat template_name.txt)
+        echo "Rolling update MIG my-app to template: $TEMPLATE_NAME"
         gcloud compute instance-groups managed rolling-action start-update my-app \
-          --version=template="$MY_TEMPLATE" \
+          --version=template="$TEMPLATE_NAME" \
           --zone=us-central1-c \
           --type=proactive \
           --max-surge=1 \
           --max-unavailable=0 \
           --quiet
 
-  # Step 5: Optional — delete old templates (keep last N templates)
+  # Step 5: Cleanup old templates (keep last 3)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Keep only last 3 templates, delete older ones
+        # List templates matching our prefix, sorted by creation time
         templates=$(gcloud compute instance-templates list \
           --filter="name~'my-template-'" \
           --sort-by=~creationTimestamp \
           --format="value(name)" | tail -n +4)
         for t in $templates; do
-          echo "Deleting old template $t"
+          echo "Deleting old template: $t"
           gcloud compute instance-templates delete "$t" --quiet
         done
 

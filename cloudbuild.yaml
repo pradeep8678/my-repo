@@ -44,7 +44,7 @@ steps:
         'start-update',
         'app-backend',
         '--version=template=my-app-template-$BUILD_ID',
-        '--zone=us-central1-c'
+        '--region=us-central1'
       ]
 
 images:

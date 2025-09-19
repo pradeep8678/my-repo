@@ -1,25 +1,74 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
+substitutions:
+  _PROJECT_ID: "psyched-option-421700"
+  _REGION: "asia-south1"
+  _REPO: "artifact-repo"
+  _IMAGE: "simple-web-app"
+  _MIG_NAME: "your-mig-name"
+  _ZONE: "us-central1-a"  # Replace with your MIG zone
+  _TEMPLATE_PREFIX: "simple-web-app-template"
 
 steps:
-  # Step 1: Build Docker image
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      [
-        'build',
-        '-t',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
-        '.'
-      ]
+# Step 1: Build Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    [
+      'build',
+      '-t',
+      '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest',
+      '.'
+    ]
 
-  # Step 2: Push Docker image to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      [
-        'push',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
-      ]
+# Step 2: Push Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    [
+      'push',
+      '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest'
+    ]
+
+# Step 3: Create a new instance template with updated image
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      TEMPLATE_NAME="${_TEMPLATE_PREFIX}-$(date +%Y%m%d%H%M%S)"
+      echo "Creating instance template: $TEMPLATE_NAME"
+      gcloud compute instance-templates create $TEMPLATE_NAME \
+        --machine-type=n1-standard-1 \
+        --image-family=debian-12 \
+        --image-project=debian-cloud \
+        --metadata=startup-script='#!/bin/bash
+set -e
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg lsb-release
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable docker
+systemctl start docker
+gcloud auth configure-docker $_REGION-docker.pkg.dev --quiet
+docker pull $_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest
+docker rm -f $_IMAGE || true
+docker run -d --restart=always --name $_IMAGE -p 80:8080 $_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest'
+      echo "Instance template created: $TEMPLATE_NAME"
+
+# Step 4: Trigger rolling update on MIG
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      gcloud compute instance-groups managed rolling-action start-update $_MIG_NAME \
+        --version template=$TEMPLATE_NAME \
+        --zone $_ZONE
+      echo "Rolling update started for MIG: $_MIG_NAME"
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

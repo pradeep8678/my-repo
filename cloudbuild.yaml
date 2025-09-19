@@ -20,14 +20,13 @@ steps:
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
       ]
 
-  # Step 3: Create instance template & roll out in the same step
+  # Step 3: Create template, rolling update, cleanup — all inside one single-quoted bash string
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
-      - |
-        # Generate a unique template name
-        TEMPLATE_NAME="my-template-$(date +%s)"
+      - '
+        TEMPLATE_NAME=my-template-$(date +%s)
         echo "Creating instance template: $TEMPLATE_NAME"
         gcloud compute instance-templates create "$TEMPLATE_NAME" \
           --machine-type=e2-small \
@@ -44,15 +43,16 @@ steps:
           --max-unavailable=0 \
           --quiet
 
-        # Optional cleanup: keep only last 3 templates
+        # Cleanup old templates (keep last 3)
         templates=$(gcloud compute instance-templates list \
-          --filter="name~'my-template-'" \
+          --filter="name~'"'"'my-template-'"'"'" \
           --sort-by=~creationTimestamp \
           --format="value(name)" | tail -n +4)
         for t in $templates; do
           echo "Deleting old template: $t"
           gcloud compute instance-templates delete "$t" --quiet
         done
+      '
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

@@ -20,7 +20,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
 | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# --- Install Docker Engine + CLI + containerd + Buildx + Compose ---
+# --- Install Docker ---
 apt-get update -y
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
@@ -35,13 +35,13 @@ gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 IMAGE_TAG=$(curl -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/attributes/COMMIT_SHA)
 
-# --- Pull the Docker image for this build ---
+# --- Pull the Docker image ---
 docker pull asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$IMAGE_TAG
 
-# --- Remove any existing container (safe cleanup) ---
+# --- Remove any existing container ---
 docker rm -f simple-web-app || true
 
-# --- Run container: host port 80 → container port 8080, auto-restart on reboot ---
+# --- Run container ---
 docker run -d \
   --restart=always \
   --name simple-web-app \

@@ -12,7 +12,7 @@ steps:
         '.'
       ]
 
-  # Step 2: Push Docker image to Artifact Registry
+  # Step 2: Push Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       [
@@ -20,30 +20,31 @@ steps:
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
       ]
 
-  # Step 3: Create template, rolling update, cleanup — all inside one bash step
+  # Step 3: Create template, roll out to MIG, cleanup — all inside one step
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - '
-        TEMPLATE_NAME="my-template-$(date +%s)"
-        echo "Creating instance template: $TEMPLATE_NAME"
-        gcloud compute instance-templates create "$TEMPLATE_NAME" \
+        # Generate a random template name
+        TEMPLATE="my-template-$RANDOM"
+        echo "Creating instance template: $TEMPLATE"
+        gcloud compute instance-templates create "$TEMPLATE" \
           --machine-type=e2-small \
           --tags=http-server,https-server \
           --metadata-from-file=startup-script=script.sh \
           --quiet
 
-        echo "Rolling update MIG my-app to template: $TEMPLATE_NAME"
+        echo "Rolling update MIG my-app to template: $TEMPLATE"
         gcloud compute instance-groups managed rolling-action start-update my-app \
-          --version=template="$TEMPLATE_NAME" \
+          --version=template="$TEMPLATE" \
           --zone=us-central1-c \
           --type=proactive \
           --max-surge=1 \
           --max-unavailable=0 \
           --quiet
 
-        # Cleanup old templates (keep last 3)
+        # Optional: delete old templates, keep only last 3
         templates=$(gcloud compute instance-templates list \
           --filter="name~my-template-" \
           --sort-by=~creationTimestamp \

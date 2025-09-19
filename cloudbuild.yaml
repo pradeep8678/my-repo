@@ -29,16 +29,19 @@ steps:
       '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest'
     ]
 
-# Step 3: Create a new instance template dynamically in bash
+# Step 3: Create instance template and perform rolling update inside the same bash step
 - name: 'gcr.io/cloud-builders/gcloud'
   entrypoint: 'bash'
   args:
     - '-c'
     - |
+      set -e
+
       # Dynamically generate template name
       TEMPLATE_NAME="${_TEMPLATE_PREFIX}-$(date +%Y%m%d%H%M%S)"
       echo "Creating instance template: $TEMPLATE_NAME"
 
+      # Create new instance template
       gcloud compute instance-templates create $TEMPLATE_NAME \
         --machine-type=n1-standard-1 \
         --image-family=debian-12 \
@@ -47,58 +50,39 @@ steps:
           #!/bin/bash
           set -e
 
-          # Cleanup conflicting Docker packages
           for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
             apt-get remove -y $pkg || true
           done
 
-          # Install prerequisites
           apt-get update -y
           apt-get install -y ca-certificates curl gnupg lsb-release
 
-          # Add Docker GPG key
           install -m 0755 -d /etc/apt/keyrings
           curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
           chmod a+r /etc/apt/keyrings/docker.asc
 
-          # Add Docker apt repo
           echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
             | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-          # Install Docker
           apt-get update -y
           apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-          # Start Docker
           systemctl enable docker
           systemctl start docker
 
-          # Authenticate Docker with Artifact Registry
           gcloud auth configure-docker $_REGION-docker.pkg.dev --quiet
-
-          # Pull latest image
           docker pull $_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest
-
-          # Remove old container
           docker rm -f $_IMAGE || true
-
-          # Run container
           docker run -d --restart=always --name $_IMAGE -p 80:8080 $_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO/$_IMAGE:latest
 
-      echo "Instance template created: $TEMPLATE_NAME"
+      echo "Instance template $TEMPLATE_NAME created."
 
-# Step 4: Rolling update MIG with the new template
-- name: 'gcr.io/cloud-builders/gcloud'
-  entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      # Use the same TEMPLATE_NAME dynamically
-      TEMPLATE_NAME=$(gcloud compute instance-templates list --filter="name~'^${_TEMPLATE_PREFIX}-'" --sort-by=~creationTimestamp --limit=1 --format="value(name)")
+      # Trigger rolling update for MIG
       gcloud compute instance-groups managed rolling-action start-update $_MIG_NAME \
         --version template=$TEMPLATE_NAME \
         --zone $_ZONE
-      echo "Rolling update started for MIG: $_MIG_NAME"
+
+      echo "Rolling update started for MIG $_MIG_NAME"
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

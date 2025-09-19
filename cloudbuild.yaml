@@ -32,7 +32,7 @@ steps:
           --metadata-from-file=startup-script=script.sh \
           --quiet
 
-  # Step 4: Rolling update MIG to new template
+  # Step 4: Rolling update MIG (zonal) to new template
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
@@ -40,13 +40,13 @@ steps:
       - |
         gcloud compute instance-groups managed rolling-action start-update my-app \
           --version=template=my-template \
-          --region=us-central1 \
+          --zone=us-central1-c \
           --type=proactive \
           --max-surge=1 \
           --max-unavailable=0 \
           --quiet
 
-  # Step 5: Delete old instance template (single command in bash)
+  # Step 5: Delete old instance template
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:

@@ -2,58 +2,16 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # Step 1: Build Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
-      [
-        'build',
-        '-t',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest',
-        '.'
-      ]
+      ['build', '-t', 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest', '.']
 
-  # Step 2: Push Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
-      [
-        'push',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'
-      ]
+      ['push', 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest']
 
-  # Step 3: Create template, roll out to MIG, cleanup — all inside one step
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - '
-        # Generate a random template name
-        TEMPLATE="my-template-$RANDOM"
-        echo "Creating instance template: $TEMPLATE"
-        gcloud compute instance-templates create "$TEMPLATE" \
-          --machine-type=e2-small \
-          --tags=http-server,https-server \
-          --metadata-from-file=startup-script=script.sh \
-          --quiet
-
-        echo "Rolling update MIG my-app to template: $TEMPLATE"
-        gcloud compute instance-groups managed rolling-action start-update my-app \
-          --version=template="$TEMPLATE" \
-          --zone=us-central1-c \
-          --type=proactive \
-          --max-surge=1 \
-          --max-unavailable=0 \
-          --quiet
-
-        # Optional: delete old templates, keep only last 3
-        templates=$(gcloud compute instance-templates list \
-          --filter="name~my-template-" \
-          --sort-by=~creationTimestamp \
-          --format="value(name)" | tail -n +4)
-        for t in $templates; do
-          echo "Deleting old template: $t"
-          gcloud compute instance-templates delete "$t" --quiet
-        done
-      '
+    entrypoint: './deploy.sh'
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:latest'

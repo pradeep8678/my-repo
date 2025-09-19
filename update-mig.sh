@@ -4,7 +4,7 @@ set -e
 # Variables
 PROJECT_ID="psyched-option-421700"
 REGION="asia-south1"
-ZONE="us-central1"
+ZONE="us-central1-a"
 MIG_NAME="myy-app-group"
 TEMPLATE_PREFIX="simple-web-app-template"
 

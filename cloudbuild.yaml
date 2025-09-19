@@ -38,8 +38,7 @@ steps:
     args:
       - '-c'
       - |
-        MIG_NAME="my-app"
-        gcloud compute instance-groups managed rolling-action start-update $MIG_NAME \
+        gcloud compute instance-groups managed rolling-action start-update my-app \
           --version=template=my-template \
           --region=us-central1 \
           --type=proactive \
@@ -55,7 +54,7 @@ steps:
       - |
         OLD_TEMPLATE=$(gcloud compute instance-templates list \
           --filter="name!=my-template" \
-          --format="value(name)")
+          --format="value(name)" | head -n 1)
         if [ ! -z "$OLD_TEMPLATE" ]; then
           gcloud compute instance-templates delete $OLD_TEMPLATE --quiet
         fi

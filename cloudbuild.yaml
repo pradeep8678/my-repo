@@ -20,7 +20,7 @@ steps:
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
       ]
 
-  # Step 3: Call deploy.sh (handles instance template + rolling update)
+  # Step 3: Deploy using deploy.sh
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:

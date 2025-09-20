@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# --- Clean up any old/conflicting Docker packages ---
+# --- Clean up old/conflicting Docker ---
 for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
   apt-get remove -y $pkg || true
 done
@@ -31,17 +31,15 @@ systemctl start docker
 # --- Authenticate Docker with Artifact Registry ---
 gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
-# --- Get COMMIT_SHA from instance metadata ---
+# --- Get commit SHA from instance metadata ---
 IMAGE_TAG=$(curl -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/attributes/COMMIT_SHA)
 
-# --- Pull the Docker image ---
+# --- Pull & run the app ---
 docker pull asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$IMAGE_TAG
 
-# --- Remove any existing container ---
 docker rm -f simple-web-app || true
 
-# --- Run container ---
 docker run -d \
   --restart=always \
   --name simple-web-app \

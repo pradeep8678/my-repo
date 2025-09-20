@@ -1,20 +1,26 @@
 #!/bin/bash
 set -e
 
-# Unique template name using commit + timestamp
-TEMPLATE="my-template-${COMMIT_SHA:0:7}-$(date +%s)"
+# Commit SHA from Cloud Build
+COMMIT_SHA="$1"
+if [[ -z "$COMMIT_SHA" ]]; then
+  echo "ERROR: COMMIT_SHA not provided!"
+  exit 1
+fi
 
-echo ">>> Creating instance template: $TEMPLATE"
+# Generate unique instance template name
+TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
+echo "Creating instance template: $TEMPLATE"
 
+# Create instance template with startup script & COMMIT_SHA metadata
 gcloud compute instance-templates create "$TEMPLATE" \
   --machine-type=e2-small \
-  --metadata=COMMIT_SHA=$COMMIT_SHA \
-  --metadata-from-file=startup-script=script.sh \
   --tags=http-server,https-server \
+  --metadata=COMMIT_SHA="$COMMIT_SHA" \
+  --metadata-from-file=startup-script=script.sh \
   --quiet
 
-echo ">>> Rolling update MIG my-app to template: $TEMPLATE"
-
+echo "Starting rolling update in MIG my-app to template: $TEMPLATE"
 gcloud compute instance-groups managed rolling-action start-update my-app \
   --version=template="$TEMPLATE" \
   --zone=us-central1-c \
@@ -23,12 +29,11 @@ gcloud compute instance-groups managed rolling-action start-update my-app \
   --max-unavailable=0 \
   --quiet
 
-echo ">>> Cleanup: keeping only last 3 templates"
+# Optional: cleanup old templates (keep last 3)
 templates=$(gcloud compute instance-templates list \
   --filter="name~my-template-" \
   --sort-by=~creationTimestamp \
   --format="value(name)" | tail -n +4)
-
 for t in $templates; do
   echo "Deleting old template: $t"
   gcloud compute instance-templates delete "$t" --quiet

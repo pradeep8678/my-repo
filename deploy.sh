@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-# Use random template name
-TEMPLATE="my-template-$(date +%s)"
+# Unique template name using commit + timestamp
+TEMPLATE="my-template-${COMMIT_SHA:0:7}-$(date +%s)"
 
-echo "Creating instance template: $TEMPLATE"
+echo ">>> Creating instance template: $TEMPLATE"
 
 gcloud compute instance-templates create "$TEMPLATE" \
   --machine-type=e2-small \
@@ -13,7 +13,7 @@ gcloud compute instance-templates create "$TEMPLATE" \
   --tags=http-server,https-server \
   --quiet
 
-echo "Rolling update MIG my-app to template: $TEMPLATE"
+echo ">>> Rolling update MIG my-app to template: $TEMPLATE"
 
 gcloud compute instance-groups managed rolling-action start-update my-app \
   --version=template="$TEMPLATE" \
@@ -23,11 +23,12 @@ gcloud compute instance-groups managed rolling-action start-update my-app \
   --max-unavailable=0 \
   --quiet
 
-# Optional: delete old templates keeping last 3
+echo ">>> Cleanup: keeping only last 3 templates"
 templates=$(gcloud compute instance-templates list \
   --filter="name~my-template-" \
   --sort-by=~creationTimestamp \
   --format="value(name)" | tail -n +4)
+
 for t in $templates; do
   echo "Deleting old template: $t"
   gcloud compute instance-templates delete "$t" --quiet

@@ -1,41 +1,33 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
-substitutions:
-  _REGION: "asia-south1"
-  _PROJECT: "psyched-option-421700"
-  _REPO: "artifact-repo"
-  _IMAGE: "simple-web-app"
-  _ZONE: "us-central1-c"
-  _LIVE_MIG: "my-app-blue"
-  _IDLE_MIG: "my-app-green"
-  _BACKEND: "backend-service"
-
 steps:
 # Step 0: Build Docker image
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - build
-    - '-t'
-    - 'asia-south1-docker.pkg.dev/$_PROJECT/$_REPO/$_IMAGE:$COMMIT_SHA'
-    - '.'
-
-# Step 1: Push Docker image
+    - -t
+    - asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA
+    - .
+    
+# Step 1: Push Docker image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - push
-    - 'asia-south1-docker.pkg.dev/$_PROJECT/$_REPO/$_IMAGE:$COMMIT_SHA'
+    - asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA
 
-# Step 2: Deploy to MIG
+# Step 2: Deploy to GCP
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
   args:
     - '-c'
     - |
-      ./deploy.sh \
-        $_PROJECT \
-        $_ZONE \
-        $_LIVE_MIG \
-        $_IDLE_MIG \
-        $_BACKEND \
-        $COMMIT_SHA
+      chmod +x deploy.sh
+      ./deploy.sh $COMMIT_SHA
+
+substitutions:
+  _MIG_NAME: "my-app-green"
+  _TEMPLATE_NAME_PREFIX: "my-app-template"
+  _ZONE: "asia-south1-a"
+
+timeout: 1200s

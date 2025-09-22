@@ -1,57 +1,60 @@
 #!/bin/bash
 set -e
 
+# -----------------------------
 # Variables
+# -----------------------------
 PROJECT_ID="psyched-option-421700"
 REGION="us-central1"
 ZONE="us-central1-c"
-REPO_NAME="artifact-repo"
+REPO="artifact-repo"
 IMAGE_NAME="simple-web-app"
-LB_BACKEND="backend-service"
+COMMIT_SHA=${COMMIT_SHA:-$(git rev-parse --short HEAD)}
 LIVE_MIG="my-app-blue"
 IDLE_MIG="my-app-green"
+LB_BACKEND="backend-service"
 
-# Get commit SHA
-COMMIT_SHA=$(git rev-parse HEAD)
-echo "Deploying version with commit SHA: $COMMIT_SHA"
+# -----------------------------
+# Build & Push Docker Image
+# -----------------------------
+echo "Building Docker image..."
+docker build -t asia-south1-docker.pkg.dev/$PROJECT_ID/$REPO/$IMAGE_NAME:$COMMIT_SHA .
 
-# Build Docker image
-docker build -t asia-south1-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$COMMIT_SHA .
+echo "Pushing Docker image..."
+docker push asia-south1-docker.pkg.dev/$PROJECT_ID/$REPO/$IMAGE_NAME:$COMMIT_SHA
 
-# Push Docker image
-docker push asia-south1-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$COMMIT_SHA
-
-# Create new instance template
-gcloud compute instance-templates create my-app-template-$COMMIT_SHA \
-  --project=$PROJECT_ID \
+# -----------------------------
+# Create new Instance Template
+# -----------------------------
+TEMPLATE_NAME="${IMAGE_NAME}-template-$COMMIT_SHA"
+echo "Creating instance template $TEMPLATE_NAME..."
+gcloud compute instance-templates create $TEMPLATE_NAME \
   --machine-type=e2-small \
   --image-family=cos-stable \
   --image-project=cos-cloud \
   --boot-disk-size=20GB \
   --metadata=startup-script='#!/bin/bash
-docker pull asia-south1-docker.pkg.dev/'$PROJECT_ID'/'$REPO_NAME'/'$IMAGE_NAME':'$COMMIT_SHA'
-docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/'$PROJECT_ID'/'$REPO_NAME'/'$IMAGE_NAME':'$COMMIT_SHA''
+docker pull asia-south1-docker.pkg.dev/'$PROJECT_ID'/'$REPO'/'$IMAGE_NAME':'$COMMIT_SHA'
+docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/'$PROJECT_ID'/'$REPO'/'$IMAGE_NAME':'$COMMIT_SHA'
 
-# Update idle MIG with new template
+# -----------------------------
+# Rolling update of MIG
+# -----------------------------
+echo "Updating MIG $IDLE_MIG with new template..."
 gcloud compute instance-groups managed rolling-action replace $IDLE_MIG \
-  my-app-template-$COMMIT_SHA \
+  --template=$TEMPLATE_NAME \
   --zone=$ZONE
 
-# Wait until idle MIG is stable
-echo "Waiting for $IDLE_MIG to become healthy..."
-gcloud compute instance-groups managed wait-until-stable $IDLE_MIG --zone=$ZONE
-
-# Swap MIGs in backend service
-echo "Swapping backend from $LIVE_MIG to $IDLE_MIG"
+# -----------------------------
+# Swap MIGs on Load Balancer
+# -----------------------------
+echo "Updating LB backend..."
 gcloud compute backend-services remove-backend $LB_BACKEND \
-  --instance-group=$LIVE_MIG --instance-group-zone=$ZONE
+  --instance-group=$LIVE_MIG \
+  --instance-group-zone=$ZONE
 
 gcloud compute backend-services add-backend $LB_BACKEND \
-  --instance-group=$IDLE_MIG --instance-group-zone=$ZONE
+  --instance-group=$IDLE_MIG \
+  --instance-group-zone=$ZONE
 
-# Optionally, rename MIGs for next deploy
-TEMP=$LIVE_MIG
-LIVE_MIG=$IDLE_MIG
-IDLE_MIG=$TEMP
-
-echo "Deployment complete!"
+echo "Deployment completed successfully!"

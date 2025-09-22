@@ -23,7 +23,7 @@ gcloud compute instance-templates create my-app-template-$COMMIT_SHA \
   --metadata=startup-script='#!/bin/bash
     docker-credential-gcr configure-docker
     docker pull '"$IMAGE"'
-    docker run -d -p 8080:8080 '"$IMAGE"''
+    docker run -d -p 8080:80 '"$IMAGE"''
 
 echo "Starting rolling update on MIG..."
 gcloud compute instance-groups managed rolling-action start-update my-app \

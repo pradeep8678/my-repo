@@ -1,33 +1,36 @@
 #!/bin/bash
 set -e
 
-# Variables
-PROJECT_ID="${_PROJECT_ID}"
-ZONE="${_ZONE}"
-MIG_NAME="${_MIG_NAME}"
-IMAGE="asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app:${COMMIT_SHA}"
-TEMPLATE_NAME="my-app-template-${COMMIT_SHA}"
-
+# Ensure COMMIT_SHA is provided
 if [ -z "$COMMIT_SHA" ]; then
   echo "Error: COMMIT_SHA is not set!"
   exit 1
 fi
 
-echo "Creating instance template: $TEMPLATE_NAME"
+IMAGE="asia-south1-docker.pkg.dev/${_PROJECT_ID}/artifact-repo/simple-web-app:${COMMIT_SHA}"
+TEMPLATE_NAME="my-app-template-${COMMIT_SHA}"
 
+echo "Creating instance template: $TEMPLATE_NAME with image: $IMAGE"
+
+# Create a new instance template with the latest Docker image
 gcloud compute instance-templates create "$TEMPLATE_NAME" \
-    --project="$PROJECT_ID" \
     --machine-type=e2-small \
-    --network=default \
-    --metadata=startup-script="#!/bin/bash
-        apt-get update && apt-get install -y docker.io
-        docker pull $IMAGE
-        docker run -d -p 8080:8080 $IMAGE" \
-    --tags=http-server
+    --image-family=cos-stable \
+    --image-project=cos-cloud \
+    --boot-disk-size=20GB \
+    --metadata=startup-script='#!/bin/bash
+      docker-credential-gcr configure-docker
+      docker pull '"$IMAGE"'
+      docker run -d -p 8080:8080 '"$IMAGE"'' \
+    --region=${_ZONE%-*} # extract region from zone
 
-echo "Updating managed instance group: $MIG_NAME"
-gcloud compute instance-groups managed rolling-action replace "$MIG_NAME" \
-    --zone="$ZONE" \
-    --version=template="$TEMPLATE_NAME"
+echo "Updating Managed Instance Group: $_MIG_NAME"
+
+# Perform rolling update
+gcloud compute instance-groups managed rolling-action replace $_MIG_NAME \
+    --region=${_ZONE%-*} \
+    --max-surge=1 \
+    --max-unavailable=1 \
+    --template="$TEMPLATE_NAME"
 
 echo "Deployment complete!"

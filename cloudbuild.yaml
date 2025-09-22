@@ -27,7 +27,7 @@ steps:
 
 substitutions:
   _ZONE: 'us-central1-c'
-  _MIG_NAME: 'my-app-mig'
+  _MIG_NAME: 'my-app'
   _PROJECT_ID: 'psyched-option-421700'
 
 timeout: '1200s'

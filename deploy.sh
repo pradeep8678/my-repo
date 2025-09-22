@@ -1,83 +1,88 @@
 #!/bin/bash
 set -e
 
-# Variables
 PROJECT_ID="psyched-option-421700"
 REGION="us-central1"
 ZONE="us-central1-c"
-REPO="asia-south1-docker.pkg.dev/$PROJECT_ID/artifact-repo/simple-web-app"
+REPO="artifact-repo"
+IMAGE="simple-web-app"
+BACKEND_SERVICE="backend-service"
+
+# Commit SHA passed from Cloud Build substitution
 COMMIT_SHA=$1
-LB_BACKEND="backend-service"   # ✅ your actual backend service
-
-# MIG names
-BLUE="my-app-blue"
-GREEN="my-app-green"
-
-# Detect which MIG is live
-if gcloud compute instance-groups managed describe $BLUE --zone $ZONE --project $PROJECT_ID >/dev/null 2>&1; then
-    LIVE=$BLUE
-    IDLE=$GREEN
-else
-    LIVE=$GREEN
-    IDLE=$BLUE
+if [ -z "$COMMIT_SHA" ]; then
+  echo "ERROR: Commit SHA not provided!"
+  exit 1
 fi
 
-echo "Live MIG: $LIVE"
-echo "Idle MIG (to deploy new version): $IDLE"
+IMAGE_PATH="asia-south1-docker.pkg.dev/$PROJECT_ID/$REPO/$IMAGE:$COMMIT_SHA"
 
-# Create new instance template with the new image
+# Decide live vs idle MIGs
+LIVE="my-app-blue"
+IDLE="my-app-green"
+
+if gcloud compute instance-groups managed describe $LIVE --zone $ZONE --project $PROJECT_ID >/dev/null 2>&1; then
+  echo "Live MIG: $LIVE"
+  echo "Idle MIG (to deploy new version): $IDLE"
+else
+  LIVE="my-app-green"
+  IDLE="my-app-blue"
+  echo "Live MIG: $LIVE"
+  echo "Idle MIG (to deploy new version): $IDLE"
+fi
+
+# --- Create new instance template ---
 TEMPLATE_NAME="my-app-template-$(date +%s)"
+
 gcloud compute instance-templates create $TEMPLATE_NAME \
-  --project=$PROJECT_ID \
+  --project $PROJECT_ID \
   --machine-type=e2-small \
   --image-family=debian-11 \
   --image-project=debian-cloud \
-  --boot-disk-size=10GB \
-  --metadata=startup-script="#!/bin/bash
-    docker-credential-gcr configure-docker
-    apt-get update && apt-get install -y docker.io
-    docker run -d -p 80:8080 --name simple-web-app $REPO:$COMMIT_SHA"
+  --boot-disk-size=20GB \
+  --metadata-from-file startup-script=script.sh \
+  --metadata COMMIT_SHA=$COMMIT_SHA
 
 echo "Created instance template: $TEMPLATE_NAME"
 
-# Create or update the idle MIG with new template
+# --- Update or create the idle MIG ---
 if gcloud compute instance-groups managed describe $IDLE --zone $ZONE --project $PROJECT_ID >/dev/null 2>&1; then
-    echo "Updating existing MIG $IDLE"
-    gcloud compute instance-groups managed rolling-action replace $IDLE \
-      --zone $ZONE \
-      --version template=$TEMPLATE_NAME \
-      --max-unavailable=0 \
-      --max-surge=1
+  echo "Updating existing MIG $IDLE"
+  gcloud compute instance-groups managed rolling-action replace $IDLE \
+    --zone $ZONE \
+    --instance-template=$TEMPLATE_NAME \
+    --max-unavailable=0 \
+    --max-surge=1
 else
-    echo "Creating MIG: $IDLE"
-    gcloud compute instance-groups managed create $IDLE \
-      --zone $ZONE \
-      --size 1 \
-      --template $TEMPLATE_NAME
+  echo "Creating MIG: $IDLE"
+  gcloud compute instance-groups managed create $IDLE \
+    --zone $ZONE \
+    --size 1 \
+    --template $TEMPLATE_NAME
 fi
 
-# Wait until idle MIG is healthy
+# --- Wait for idle MIG to stabilize ---
 echo "Waiting for MIG $IDLE to become healthy..."
-gcloud compute instance-groups managed wait-until --stable $IDLE --zone $ZONE
+gcloud compute instance-groups managed wait-until $IDLE \
+  --zone $ZONE \
+  --stable
 
-# Swap backend service to point to idle MIG
-echo "Swapping backend service to new MIG..."
-gcloud compute backend-services remove-backend $LB_BACKEND \
-  --instance-group=$LIVE \
-  --instance-group-zone=$ZONE \
+# --- Switch backend service to new MIG ---
+echo "Updating LB backend $BACKEND_SERVICE to point to $IDLE"
+gcloud compute backend-services update-backend $BACKEND_SERVICE \
+  --project $PROJECT_ID \
   --global \
-  --quiet || true
+  --balancing-mode UTILIZATION \
+  --instance-group $IDLE \
+  --instance-group-zone $ZONE \
+  --capacity-scaler 1
 
-gcloud compute backend-services add-backend $LB_BACKEND \
-  --instance-group=$IDLE \
-  --instance-group-zone=$ZONE \
+# --- Remove old MIG from LB ---
+echo "Removing old MIG $LIVE from backend $BACKEND_SERVICE"
+gcloud compute backend-services remove-backend $BACKEND_SERVICE \
+  --project $PROJECT_ID \
   --global \
-  --quiet
+  --instance-group $LIVE \
+  --instance-group-zone $ZONE || echo "Old MIG not attached, skipping."
 
-echo "Traffic switched to $IDLE"
-
-# Optionally delete the old MIG
-echo "Deleting old MIG $LIVE..."
-gcloud compute instance-groups managed delete $LIVE --zone $ZONE --quiet || true
-
-echo "✅ Blue-Green deployment completed successfully."
+echo "Blue-Green Deployment completed successfully!"

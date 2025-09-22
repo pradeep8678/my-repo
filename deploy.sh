@@ -29,10 +29,17 @@ docker-credential-gcr configure-docker
 docker run -d -p 8080:8080 ${IMAGE_NAME}:${COMMIT_SHA}" \
     --tags=http-server
 
-# Step 2: Update the Managed Instance Group
-echo "Updating Managed Instance Group: ${MIG_NAME}"
-gcloud compute instance-groups managed rolling-action replace "${MIG_NAME}" \
+# Step 2: Update the MIG to use the new template
+echo "Setting MIG ${MIG_NAME} to use template ${TEMPLATE_NAME}"
+gcloud compute instance-groups managed set-instance-template "${MIG_NAME}" \
     --region="${REGION}" \
     --template="${TEMPLATE_NAME}"
+
+# Step 3: Rolling update to apply the new template
+echo "Starting rolling update for MIG ${MIG_NAME}"
+gcloud compute instance-groups managed rolling-action start-update "${MIG_NAME}" \
+    --region="${REGION}" \
+    --max-surge=1 \
+    --max-unavailable=0
 
 echo "Deployment started successfully!"

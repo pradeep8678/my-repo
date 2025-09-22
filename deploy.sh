@@ -19,10 +19,8 @@ gcloud compute instance-templates create my-app-template-$COMMIT_SHA \
 
 # Update GREEN MIG (idle group)
 gcloud compute instance-groups managed rolling-action replace my-app-green \
-  --version=template=my-app-template-$COMMIT_SHA \
-  --zone=us-central1-c \
-  --max-surge=1 \
-  --max-unavailable=0
+  --template=my-app-template-$COMMIT_SHA \
+  --zone=us-central1-c
 
 # Switch traffic from BLUE to GREEN
 gcloud compute backend-services set-backend backend-service \

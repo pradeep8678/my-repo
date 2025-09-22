@@ -1,49 +1,38 @@
 #!/bin/bash
 set -e
 
-# Validate required variables
-if [ -z "$COMMIT_SHA" ]; then
-  echo "Error: COMMIT_SHA is not set!"
-  exit 1
-fi
-if [ -z "$MIG_NAME" ]; then
-  echo "Error: MIG_NAME is not set!"
-  exit 1
-fi
-if [ -z "$ZONE" ]; then
-  echo "Error: ZONE is not set!"
-  exit 1
-fi
-if [ -z "$PROJECT_ID" ]; then
-  echo "Error: PROJECT_ID is not set!"
-  exit 1
-fi
-
-IMAGE="asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app:${COMMIT_SHA}"
+# Variables
+PROJECT_ID="psyched-option-421700"
+REGION="asia-south1"
+ZONE="asia-south1-a"
+MIG_NAME="my-app-mig"
+IMAGE_NAME="asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app"
+COMMIT_SHA=${COMMIT_SHA:-$(git rev-parse --short HEAD)}
 TEMPLATE_NAME="my-app-template-${COMMIT_SHA}"
-REGION="${ZONE%-*}"
 
-echo "Creating instance template: $TEMPLATE_NAME with image: $IMAGE"
+echo "Deploying image with COMMIT_SHA=${COMMIT_SHA}"
 
-gcloud compute instance-templates create "$TEMPLATE_NAME" \
+# Step 1: Create a new instance template
+echo "Creating instance template: ${TEMPLATE_NAME}"
+gcloud compute instance-templates create "${TEMPLATE_NAME}" \
+    --project="${PROJECT_ID}" \
     --machine-type=e2-small \
+    --region="${REGION}" \
+    --network=default \
+    --maintenance-policy=MIGRATE \
     --image-family=cos-stable \
     --image-project=cos-cloud \
-    --boot-disk-size=20GB \
-    --metadata=startup-script='#!/bin/bash
-      docker-credential-gcr configure-docker
-      docker pull '"$IMAGE"'
-      docker run -d -p 8080:8080 '"$IMAGE"'' \
-    --project="$PROJECT_ID"
+    --boot-disk-size=10GB \
+    --boot-disk-type=pd-standard \
+    --metadata=startup-script="#!/bin/bash
+docker-credential-gcr configure-docker
+docker run -d -p 8080:8080 ${IMAGE_NAME}:${COMMIT_SHA}" \
+    --tags=http-server
 
-echo "Updating Managed Instance Group: $MIG_NAME"
+# Step 2: Update the Managed Instance Group
+echo "Updating Managed Instance Group: ${MIG_NAME}"
+gcloud compute instance-groups managed rolling-action replace "${MIG_NAME}" \
+    --region="${REGION}" \
+    --template="${TEMPLATE_NAME}"
 
-# Correct way to update MIG to new template
-gcloud compute instance-groups managed update "$MIG_NAME" \
-    --region="$REGION" \
-    --template="$TEMPLATE_NAME" \
-    --max-surge=1 \
-    --max-unavailable=1 \
-    --project="$PROJECT_ID"
-
-echo "Deployment complete!"
+echo "Deployment started successfully!"

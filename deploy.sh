@@ -4,7 +4,7 @@ set -e
 # Variables
 PROJECT_ID="psyched-option-421700"
 ZONE="us-central1-c"
-MIG_NAME="my-app-mig"
+MIG_NAME="my-app"
 IMAGE_NAME="asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app"
 COMMIT_SHA=${COMMIT_SHA:-$(git rev-parse --short HEAD)}
 TEMPLATE_NAME="my-app-template-${COMMIT_SHA}"

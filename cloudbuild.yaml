@@ -19,9 +19,8 @@ steps:
   args:
     - '-c'
     - |
-      echo "Deploying image with COMMIT_SHA=${SHORT_SHA}"
       chmod +x deploy.sh
-      COMMIT_SHA=${SHORT_SHA} ./deploy.sh
+      COMMIT_SHA=${SHORT_SHA} MIG_NAME=${_MIG_NAME} ZONE=${_ZONE} PROJECT_ID=${PROJECT_ID} ./deploy.sh
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -29,4 +28,3 @@ options:
 substitutions:
   _ZONE: "asia-south1-a"
   _MIG_NAME: "my-app-mig"
-  _PROJECT_ID: "psyched-option-421700"

@@ -2,42 +2,30 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-# Step 0: Build Docker image
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    - build
-    - '-t'
-    - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
-    - '.'
+  # Step 1: Build Docker image with commit SHA tag
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA',
+        '.'
+      ]
 
-# Step 1: Push Docker image to Artifact Registry
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    - push
-    - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
+  # Step 2: Push Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'push',
+        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
+      ]
 
-# Step 2: Update Managed Instance Group
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
-  entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      echo "Deploying image with COMMIT_SHA=$COMMIT_SHA"
+  # Step 3: Deploy via script (call bash explicitly)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - './deploy.sh'
+      - "$COMMIT_SHA"   # Pass commit SHA as argument
 
-      # Create new instance template with the latest image
-      gcloud compute instance-templates create my-app-template-$COMMIT_SHA \
-        --machine-type=e2-small \
-        --boot-disk-size=20GB \
-        --image-project=cos-cloud \
-        --image-family=cos-stable \
-        --metadata=startup-script='#!/bin/bash
-          docker-credential-gcr configure-docker
-          docker pull asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:'"$COMMIT_SHA"'
-          docker run -d -p 8080:8080 asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:'"$COMMIT_SHA"''
-      
-      # Perform rolling update on MIG using the new template
-      gcloud compute instance-groups managed rolling-action start-update my-app \
-        --version=template=my-app-template-$COMMIT_SHA \
-        --zone=us-central1-c \
-        --max-surge=1 \
-        --max-unavailable=0
+images:
+  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'

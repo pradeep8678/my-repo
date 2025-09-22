@@ -4,18 +4,16 @@ steps:
   args:
     - build
     - '-t'
-    - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
-    - .
-  id: Build
+    - 'asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app:${COMMIT_SHA}'
+    - '.'
 
-# Step 1: Push Docker image
+# Step 1: Push Docker image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - push
-    - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
-  id: Push
+    - 'asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app:${COMMIT_SHA}'
 
-# Step 2: Deploy
+# Step 2: Deploy to GCP (instance template + MIG)
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
   entrypoint: 'bash'
   args:
@@ -23,12 +21,13 @@ steps:
     - |
       chmod +x deploy.sh
       ./deploy.sh
-  id: Deploy
+
+# Optional: Logs only in Cloud Logging (avoids build bucket requirement)
+options:
+  logging: CLOUD_LOGGING_ONLY
 
 substitutions:
   _ZONE: "asia-south1-a"
   _MIG_NAME: "my-app-mig"
   _PROJECT_ID: "psyched-option-421700"
-
-options:
-  logging: CLOUD_LOGGING_ONLY
+  COMMIT_SHA: $SHORT_SHA

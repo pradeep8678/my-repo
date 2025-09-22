@@ -1,69 +1,90 @@
 #!/bin/bash
 set -e
 
-ZONE="us-central1-c"
-PROJECT="psyched-option-421700"
-IMAGE="asia-south1-docker.pkg.dev/$PROJECT/artifact-repo/simple-web-app:$COMMIT_SHA"
-LB_BACKEND="backend" # backend service of LB
+# Configs
+LB_BACKEND="backend"          # Your LB backend service name
+ZONE="us-central1-c"          # MIG zone
+MACHINE_TYPE="e2-small"       # VM type
+TEMPLATE_PREFIX="my-app"      # Prefix for instance templates and MIGs
+MIG_PREFIX="my-app"           # Prefix for MIG names
+DESIRED_SIZE=1                # Desired number of VMs per MIG
 
-# 1️⃣ Determine current live MIG (Blue or Green)
-CURRENT_MIG=$(gcloud compute instance-groups managed list --filter="name~my-app-" --format="value(name)" | grep -E "blue|green" | head -1)
+# Determine current live MIG
+BLUE_MIG="${MIG_PREFIX}-blue"
+GREEN_MIG="${MIG_PREFIX}-green"
 
-if [[ "$CURRENT_MIG" == *"blue"* ]]; then
-  NEW_MIG="my-app-green"
+LIVE_MIG=""
+IDLE_MIG=""
+
+if gcloud compute instance-groups managed describe "$BLUE_MIG" --zone="$ZONE" &>/dev/null; then
+    LIVE_MIG="$BLUE_MIG"
+    IDLE_MIG="$GREEN_MIG"
+elif gcloud compute instance-groups managed describe "$GREEN_MIG" --zone="$ZONE" &>/dev/null; then
+    LIVE_MIG="$GREEN_MIG"
+    IDLE_MIG="$BLUE_MIG"
 else
-  NEW_MIG="my-app-blue"
+    # No MIG exists yet; first deployment
+    LIVE_MIG=""
+    IDLE_MIG="$BLUE_MIG"
 fi
 
-echo "Deploying new MIG: $NEW_MIG"
+echo "Live MIG: $LIVE_MIG"
+echo "Idle MIG (to deploy new version): $IDLE_MIG"
 
-# 2️⃣ Create new instance template
-TEMPLATE_NAME="$NEW_MIG-template-$RANDOM"
+# Create new instance template for idle MIG
+TEMPLATE_NAME="${TEMPLATE_PREFIX}-template-$(date +%s)"
+echo "Creating instance template: $TEMPLATE_NAME"
+
 gcloud compute instance-templates create "$TEMPLATE_NAME" \
-  --machine-type=e2-small \
-  --metadata=COMMIT_SHA=$COMMIT_SHA \
-  --metadata-from-file=startup-script=script.sh \
-  --tags=http-server,https-server \
-  --quiet
+    --machine-type="$MACHINE_TYPE" \
+    --metadata-from-file=startup-script=script.sh \
+    --tags=http-server,https-server \
+    --quiet
 
-# 3️⃣ Create/Update the new MIG
-if gcloud compute instance-groups managed describe "$NEW_MIG" --zone $ZONE &>/dev/null; then
-  echo "Updating MIG $NEW_MIG with new template"
-  gcloud compute instance-groups managed rolling-action start-update "$NEW_MIG" \
-    --version=template="$TEMPLATE_NAME" \
-    --zone=$ZONE \
-    --type=proactive \
-    --max-surge=1 \
-    --max-unavailable=0 \
-    --quiet
+# Create new MIG or resize if exists
+if gcloud compute instance-groups managed describe "$IDLE_MIG" --zone="$ZONE" &>/dev/null; then
+    echo "MIG $IDLE_MIG exists, updating template"
+    gcloud compute instance-groups managed set-instance-template "$IDLE_MIG" \
+        --template="$TEMPLATE_NAME" \
+        --zone="$ZONE" \
+        --quiet
+    gcloud compute instance-groups managed resize "$IDLE_MIG" \
+        --size="$DESIRED_SIZE" \
+        --zone="$ZONE" \
+        --quiet
 else
-  echo "Creating new MIG $NEW_MIG"
-  gcloud compute instance-groups managed create "$NEW_MIG" \
-    --base-instance-name "$NEW_MIG" \
-    --size=1 \
-    --template="$TEMPLATE_NAME" \
-    --zone=$ZONE \
-    --health-check=my-app-hc \
-    --initial-delay=60 \
-    --quiet
+    echo "Creating MIG: $IDLE_MIG"
+    gcloud compute instance-groups managed create "$IDLE_MIG" \
+        --base-instance-name="$IDLE_MIG" \
+        --template="$TEMPLATE_NAME" \
+        --size="$DESIRED_SIZE" \
+        --zone="$ZONE" \
+        --quiet
 fi
 
-# 4️⃣ Wait for new MIG instances to become healthy
-echo "Waiting for new MIG $NEW_MIG to become healthy..."
-sleep 60 # initial delay
-gcloud compute instance-groups managed wait-until-stable "$NEW_MIG" --zone=$ZONE --quiet
+# Wait for MIG to become healthy
+echo "Waiting for MIG $IDLE_MIG to become healthy..."
+gcloud compute instance-groups managed wait-until --stable "$IDLE_MIG" --zone="$ZONE"
 
-# 5️⃣ Switch LB backend to new MIG
-echo "Updating LB backend $LB_BACKEND to point to $NEW_MIG"
-gcloud compute backend-services update "$LB_BACKEND" \
-  --global \
-  --instance-group="$NEW_MIG" \
-  --instance-group-zone="$ZONE" \
-  --quiet
+# Switch LB backend to point to new MIG
+if [ -n "$LIVE_MIG" ]; then
+    echo "Removing old MIG $LIVE_MIG from LB backend $LB_BACKEND"
+    gcloud compute backend-services remove-backend "$LB_BACKEND" \
+        --instance-group="$LIVE_MIG" \
+        --instance-group-zone="$ZONE" \
+        --global
+fi
 
-# 6️⃣ Optional: delete old MIG (rollback point if needed)
-OLD_MIG=$(echo "$CURRENT_MIG")
-echo "Deleting old MIG $OLD_MIG"
-gcloud compute instance-groups managed delete "$OLD_MIG" --zone=$ZONE --quiet
+echo "Adding new MIG $IDLE_MIG to LB backend $LB_BACKEND"
+gcloud compute backend-services add-backend "$LB_BACKEND" \
+    --instance-group="$IDLE_MIG" \
+    --instance-group-zone="$ZONE" \
+    --global
 
-echo "Deployment completed successfully! New live MIG: $NEW_MIG"
+# Optional: delete old MIG
+if [ -n "$LIVE_MIG" ]; then
+    echo "Deleting old MIG $LIVE_MIG"
+    gcloud compute instance-groups managed delete "$LIVE_MIG" --zone="$ZONE" --quiet
+fi
+
+echo "Blue-Green deployment completed successfully!"

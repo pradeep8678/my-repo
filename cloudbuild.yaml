@@ -1,30 +1,28 @@
+steps:
+# Step 0: Build Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - build
+    - -t
+    - asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:${_COMMIT_SHA}
+    - .
+
+# Step 1: Push Docker image
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - push
+    - asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:${_COMMIT_SHA}
+
+# Step 2: Deploy using script
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: bash
+  args:
+    - ./deploy.sh
+  env:
+    - 'COMMIT_SHA=${_COMMIT_SHA}'
+
+substitutions:
+  _COMMIT_SHA: $COMMIT_SHA
+
 options:
   logging: CLOUD_LOGGING_ONLY
-
-steps:
-  # Step 1: Build Docker image with commit SHA tag
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      [
-        'build',
-        '-t',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA',
-        '.'
-      ]
-
-  # Step 2: Push Docker image
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      [
-        'push',
-        'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
-      ]
-
-  # Step 3: Deploy with Blue-Green strategy
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'bash'
-    args:
-      - './deploy.sh'
-
-images:
-  - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'

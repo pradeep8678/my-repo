@@ -2,7 +2,7 @@
 set -e
 
 # Configs
-LB_BACKEND="backend"          # Your LB backend service name
+LB_BACKEND="backend-service"          # Your LB backend service name
 ZONE="us-central1-c"          # MIG zone
 MACHINE_TYPE="e2-small"       # VM type
 TEMPLATE_PREFIX="my-app"      # Prefix for instance templates and MIGs

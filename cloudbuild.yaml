@@ -4,27 +4,26 @@ steps:
   args:
     - build
     - '-t'
-    - 'asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app:${SHORT_SHA}'
+    - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
     - '.'
 
-# Step 1: Push Docker image
+# Step 1: Push Docker image to Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - push
-    - 'asia-south1-docker.pkg.dev/${PROJECT_ID}/artifact-repo/simple-web-app:${SHORT_SHA}'
+    - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
 
-# Step 2: Deploy to MIG
+# Step 2: Deploy to MIG using deploy.sh
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
   entrypoint: 'bash'
   args:
-    - '-c'
-    - |
-      chmod +x deploy.sh
-      COMMIT_SHA=${SHORT_SHA} MIG_NAME=${_MIG_NAME} ZONE=${_ZONE} PROJECT_ID=${PROJECT_ID} ./deploy.sh
-
-options:
-  logging: CLOUD_LOGGING_ONLY
+    - './deploy.sh'
+  env:
+    - 'COMMIT_SHA=$COMMIT_SHA'
 
 substitutions:
-  _ZONE: "asia-south1-a"
-  _MIG_NAME: "my-app-mig"
+  _ZONE: 'us-central1-c'
+  _MIG_NAME: 'my-app-mig'
+  _PROJECT_ID: 'psyched-option-421700'
+
+timeout: '1200s'

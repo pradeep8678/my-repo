@@ -1,3 +1,6 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 substitutions:
   _REGION: "asia-south1"
   _PROJECT: "psyched-option-421700"

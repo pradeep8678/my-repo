@@ -20,20 +20,27 @@ gcloud compute instance-templates create "$TEMPLATE" \
   --metadata-from-file=startup-script=script.sh \
   --quiet
 
-echo "Forcing MIG replacement with template: $TEMPLATE"
+# Update MIG to point to new template
+echo "Updating MIG my-app to use new template: $TEMPLATE"
+gcloud compute instance-groups managed set-instance-template my-app \
+  --template="$TEMPLATE" \
+  --zone=us-central1-c \
+  --quiet
+
+# Force replace all instances in MIG
+echo "Force replacing all instances in MIG my-app"
 gcloud compute instance-groups managed rolling-action replace my-app \
-  --version=template="$TEMPLATE" \
   --zone=us-central1-c \
   --max-unavailable=100% \
   --max-surge=0 \
   --quiet
 
-
-# Optional: cleanup old templates (keep last 3)
+# Cleanup old templates (keep last 3)
 templates=$(gcloud compute instance-templates list \
   --filter="name~my-template-" \
   --sort-by=~creationTimestamp \
   --format="value(name)" | tail -n +4)
+
 for t in $templates; do
   echo "Deleting old template: $t"
   gcloud compute instance-templates delete "$t" --quiet

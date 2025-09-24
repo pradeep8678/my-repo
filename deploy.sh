@@ -61,22 +61,42 @@ gcloud compute backend-services add-backend "$LB_BACKEND" \
   --quiet
 
 # -------------------------
-# Remove old MIGs (keep only the latest one)
+# Remove old MIGs safely
 # -------------------------
-echo "🗑 Deleting old MIGs..."
+echo "🗑 Detaching and deleting old MIGs..."
 old_migs=$(gcloud compute instance-groups managed list \
   --format="value(name)" \
   --filter="name~my-mig-" | grep -v "$MIG" || true)
 
 if [[ -n "$old_migs" ]]; then
   for m in $old_migs; do
+    echo "Detaching old MIG: $m from LB backend $LB_BACKEND"
+    set +e
+    gcloud compute backend-services remove-backend "$LB_BACKEND" \
+      --instance-group="$m" \
+      --instance-group-zone="$ZONE" \
+      --global \
+      --quiet
+    set -e
+
     echo "Deleting old MIG: $m"
-    set +e  # prevent deletion failure from breaking the build
+    set +e
     gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
     set -e
+
+    # Cross-verify removal
+    attached=$(gcloud compute backend-services get-health "$LB_BACKEND" \
+      --global \
+      --instance-group="$m" \
+      --instance-group-zone="$ZONE" 2>/dev/null || true)
+    if [[ -z "$attached" ]]; then
+      echo "✅ MIG $m successfully detached from LB."
+    else
+      echo "⚠️ MIG $m still attached! Check manually."
+    fi
   done
 else
-  echo "No old MIGs to delete."
+  echo "No old MIGs to detach/delete."
 fi
 
 # -------------------------
@@ -91,7 +111,7 @@ templates=$(gcloud compute instance-templates list \
 if [[ -n "$templates" ]]; then
   for t in $templates; do
     echo "Deleting old template: $t"
-    set +e  # prevent deletion failure from breaking the build
+    set +e
     gcloud compute instance-templates delete "$t" --quiet
     set -e
   done

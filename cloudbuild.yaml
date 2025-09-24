@@ -20,12 +20,12 @@ steps:
         'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'
       ]
 
-  # Step 3: Deploy via script (call bash explicitly)
+  # Step 3: Deploy via Blue-Green script
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - './deploy.sh'
-      - "$COMMIT_SHA"   # Pass commit SHA as argument
+      - "$COMMIT_SHA"
 
 images:
   - 'asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$COMMIT_SHA'

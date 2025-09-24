@@ -16,8 +16,8 @@ fi
 TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
 MIG="my-mig-$COMMIT_SHA-$(date +%s)"
 ZONE="us-central1-c"
-LB_BACKEND="my-app-backend-green"  # existing backend service
-HEALTH_CHECK="my-app-hc"           # existing health check
+LB_BACKEND="my-app-backend-green"
+HEALTH_CHECK="my-app-hc"
 
 MIN_INSTANCES=1
 MAX_INSTANCES=3
@@ -76,20 +76,11 @@ gcloud compute instance-groups managed set-autoscaling "$MIG" \
   --quiet
 
 # -------------------------
-# Set max backend utilization for LB
-# -------------------------
-echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
-gcloud compute backend-services update "$LB_BACKEND" \
-  --global \
-  --max-utilization="$MAX_UTILIZATION" \
-  --quiet
-
-# -------------------------
 # Detach all old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
-attached_migs=$(gcloud compute backend-services list-backends "$LB_BACKEND" \
-  --global --format="value(group)" || true)
+attached_migs=$(gcloud compute backend-services get-health "$LB_BACKEND" \
+  --global --format="value(backend.group)" || true)
 
 if [[ -n "$attached_migs" ]]; then
   for m in $attached_migs; do
@@ -109,8 +100,8 @@ if [[ -n "$attached_migs" ]]; then
 
     # Wait until MIG is fully detached
     echo "⏳ Waiting for $m to be detached..."
-    while gcloud compute backend-services list-backends "$LB_BACKEND" \
-          --global --format="value(group)" | grep -q "$m"; do
+    while gcloud compute backend-services get-health "$LB_BACKEND" \
+          --global --instance-group="$m" --instance-group-zone="$ZONE" | grep -q "healthState"; do
       sleep 5
     done
     echo "✅ MIG $m detached successfully."
@@ -139,13 +130,14 @@ else
 fi
 
 # -------------------------
-# Attach new MIG to Load Balancer backend
+# Attach new MIG to Load Balancer backend with max utilization
 # -------------------------
-echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
+echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND with max utilization $MAX_UTILIZATION"
 gcloud compute backend-services add-backend "$LB_BACKEND" \
   --instance-group="$MIG" \
   --instance-group-zone="$ZONE" \
   --global \
+  --max-backend-utilization="$MAX_UTILIZATION" \
   --quiet
 
 # -------------------------

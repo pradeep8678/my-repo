@@ -82,27 +82,30 @@ echo "🗑 Detaching old MIGs from LB backend..."
 attached_migs=$(gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" || true)
 
 if [[ -n "$attached_migs" ]]; then
-  for m in $attached_migs; do
+  IFS=";" read -ra MIG_ARRAY <<< "$attached_migs"
+  for m in "${MIG_ARRAY[@]}"; do
+    MIG_NAME=$(basename "$m")
+
     # Skip the new MIG
-    if [[ "$m" == *"$MIG"* ]]; then
+    if [[ "$MIG_NAME" == "$MIG" ]]; then
       continue
     fi
 
-    echo "🛑 Detaching old MIG: $m from backend $LB_BACKEND"
+    echo "🛑 Detaching old MIG: $MIG_NAME from backend $LB_BACKEND"
     set +e
     gcloud compute backend-services remove-backend "$LB_BACKEND" \
-      --instance-group="$m" \
+      --instance-group="$MIG_NAME" \
       --instance-group-zone="$ZONE" \
       --global \
-      --quiet
+      --quiet || true
     set -e
 
     # Wait until MIG is fully detached
-    echo "⏳ Waiting for $m to be detached..."
-    while gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" | grep -q "$m"; do
+    echo "⏳ Waiting for $MIG_NAME to be detached..."
+    while gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" | grep -q "$MIG_NAME"; do
       sleep 5
     done
-    echo "✅ MIG $m detached successfully."
+    echo "✅ MIG $MIG_NAME detached successfully."
   done
 else
   echo "No old MIGs attached to backend."

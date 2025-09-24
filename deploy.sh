@@ -63,7 +63,7 @@ gcloud compute instance-groups managed wait-until "$MIG" \
 # Detach all old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
-attached_migs=$(gcloud compute backend-services get-backend "$LB_BACKEND" \
+attached_migs=$(gcloud compute backend-services list-backends "$LB_BACKEND" \
   --global --format="value(group)" || true)
 
 if [[ -n "$attached_migs" ]]; then
@@ -73,15 +73,7 @@ if [[ -n "$attached_migs" ]]; then
       continue
     fi
 
-    echo "🔧 Ensuring named port 'http:80' for old MIG $m before detaching"
-    set +e
-    gcloud compute instance-groups set-named-ports "$m" \
-      --named-ports=http:80 \
-      --zone="$ZONE" \
-      --quiet
-    set -e
-
-    echo "🛑 Detaching MIG: $m from backend $LB_BACKEND"
+    echo "🛑 Detaching old MIG: $m from backend $LB_BACKEND"
     set +e
     gcloud compute backend-services remove-backend "$LB_BACKEND" \
       --instance-group="$m" \
@@ -91,8 +83,8 @@ if [[ -n "$attached_migs" ]]; then
     set -e
 
     # Wait until MIG is fully detached
-    echo "⏳ Waiting for $m to be detached from backend..."
-    while gcloud compute backend-services get-backend "$LB_BACKEND" \
+    echo "⏳ Waiting for $m to be detached..."
+    while gcloud compute backend-services list-backends "$LB_BACKEND" \
           --global --format="value(group)" | grep -q "$m"; do
       sleep 5
     done

@@ -16,8 +16,8 @@ fi
 TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
 MIG="my-mig-$COMMIT_SHA-$(date +%s)"
 ZONE="us-central1-c"
-LB_BACKEND="my-app-backend-green"  # your existing backend service
-HEALTH_CHECK="my-app-hc"           # your existing health check
+LB_BACKEND="my-app-backend-green"  # existing backend service
+HEALTH_CHECK="my-app-hc"           # existing health check
 
 echo "✅ Creating instance template: $TEMPLATE"
 
@@ -66,30 +66,34 @@ gcloud compute backend-services add-backend "$LB_BACKEND" \
 echo "🗑 Deleting old MIGs..."
 old_migs=$(gcloud compute instance-groups managed list \
   --format="value(name)" \
-  --filter="name~my-mig-" | grep -v "$MIG")
+  --filter="name~my-mig-" | grep -v "$MIG" || true)
 
 if [[ -n "$old_migs" ]]; then
   for m in $old_migs; do
     echo "Deleting old MIG: $m"
+    set +e  # prevent deletion failure from breaking the build
     gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
+    set -e
   done
 else
   echo "No old MIGs to delete."
 fi
 
 # -------------------------
-# Cleanup old templates (keep last 3)
+# Cleanup old instance templates (keep last 3)
 # -------------------------
 echo "🗑 Deleting old instance templates..."
 templates=$(gcloud compute instance-templates list \
   --filter="name~my-template-" \
   --sort-by=~creationTimestamp \
-  --format="value(name)" | tail -n +4)
+  --format="value(name)" | tail -n +4 || true)
 
 if [[ -n "$templates" ]]; then
   for t in $templates; do
     echo "Deleting old template: $t"
+    set +e  # prevent deletion failure from breaking the build
     gcloud compute instance-templates delete "$t" --quiet
+    set -e
   done
 else
   echo "No old templates to delete."

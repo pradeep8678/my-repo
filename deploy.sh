@@ -124,7 +124,9 @@ if [[ -n "$old_migs" ]]; then
     echo "🗑 Deleting old MIG: $m"
     set +e
     # Delete autoscaler first if exists
-    gcloud compute autoscalers delete "$m" --zone="$ZONE" --quiet || true
+    if gcloud compute autoscalers describe "$m" --zone="$ZONE" >/dev/null 2>&1; then
+      gcloud compute autoscalers delete "$m" --zone="$ZONE" --quiet || true
+    fi
     # Then delete MIG
     gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet || true
     set -e
@@ -147,7 +149,9 @@ gcloud compute backend-services add-backend "$LB_BACKEND" \
 # Update backend max utilization (60%)
 # -------------------------
 echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
-gcloud compute backend-services update "$LB_BACKEND" \
+gcloud compute backend-services update-backend "$LB_BACKEND" \
+  --instance-group="$MIG" \
+  --instance-group-zone="$ZONE" \
   --global \
   --balancing-mode=UTILIZATION \
   --max-utilization="$MAX_UTILIZATION" \

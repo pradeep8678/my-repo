@@ -8,16 +8,16 @@ if [[ -z "$COMMIT_SHA" ]]; then
   exit 1
 fi
 
-# Configuration
-ZONE="us-central1-c"
-BACKEND="my-app-lb"
-MIG_BLUE="my-app-blue"
-MIG_GREEN="my-app-green"
-
-# 1. Create new instance template
+# Generate unique names
 TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
+MIG="my-mig-$COMMIT_SHA-$(date +%s)"
+REGION="us-central1"
+ZONE="us-central1-c"
+LB_BACKEND="my-backend-service"
+
 echo "Creating instance template: $TEMPLATE"
 
+# Create new instance template
 gcloud compute instance-templates create "$TEMPLATE" \
   --machine-type=e2-small \
   --tags=http-server,https-server \
@@ -25,59 +25,42 @@ gcloud compute instance-templates create "$TEMPLATE" \
   --metadata-from-file=startup-script=script.sh \
   --quiet
 
-# 2. Determine active MIG (currently serving traffic)
-ACTIVE_MIG=$(gcloud compute backend-services describe $BACKEND \
+echo "Creating new MIG: $MIG"
+gcloud compute instance-groups managed create "$MIG" \
+  --base-instance-name="$MIG" \
+  --size=1 \
+  --template="$TEMPLATE" \
+  --zone="$ZONE" \
+  --quiet
+
+echo "Waiting for MIG $MIG to become healthy..."
+gcloud compute instance-groups managed wait-until "$MIG" \
+  --zone="$ZONE" \
+  --stable
+
+echo "Updating Load Balancer backend to new MIG..."
+gcloud compute backend-services add-backend "$LB_BACKEND" \
+  --instance-group="$MIG" \
+  --instance-group-zone="$ZONE" \
   --global \
-  --format="get(backends[].group)" | grep -E "$MIG_BLUE|$MIG_GREEN" | grep -v "size=0" | awk -F'/' '{print $NF}' || true)
+  --quiet
 
-if [[ "$ACTIVE_MIG" == "$MIG_BLUE" ]]; then
-  INACTIVE_MIG="$MIG_GREEN"
-elif [[ "$ACTIVE_MIG" == "$MIG_GREEN" ]]; then
-  INACTIVE_MIG="$MIG_BLUE"
-else
-  # First deploy, assume BLUE as initial active
-  ACTIVE_MIG="$MIG_GREEN"
-  INACTIVE_MIG="$MIG_BLUE"
-fi
+# Optional: remove old MIGs (keep latest 1)
+old_migs=$(gcloud compute instance-groups managed list \
+  --format="value(name)" \
+  --filter="name~my-mig-" | grep -v "$MIG")
 
-echo "Active MIG: $ACTIVE_MIG"
-echo "Inactive MIG (to update): $INACTIVE_MIG"
+for m in $old_migs; do
+  echo "Deleting old MIG: $m"
+  gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
+done
 
-# 3. Update inactive MIG with new template
-gcloud compute instance-groups managed set-instance-template $INACTIVE_MIG \
-  --template=$TEMPLATE \
-  --zone=$ZONE
-
-# 4. Scale up inactive MIG to 1 instance (or desired count)
-gcloud compute instance-groups managed resize $INACTIVE_MIG --size=1 --zone=$ZONE
-
-# 5. Wait for instances to become healthy
-echo "Waiting for $INACTIVE_MIG to become healthy..."
-sleep 30
-gcloud compute instance-groups managed wait-until $INACTIVE_MIG --stable --zone=$ZONE
-
-# 6. Switch backend service to new MIG
-gcloud compute backend-services update $BACKEND \
-  --no-enable-cdn \
-  --instance-group=$INACTIVE_MIG \
-  --instance-group-zone=$ZONE \
-  --global
-
-echo "Switched backend to $INACTIVE_MIG"
-
-# 7. Scale down old MIG
-gcloud compute instance-groups managed resize $ACTIVE_MIG --size=0 --zone=$ZONE
-echo "Scaled down old MIG: $ACTIVE_MIG"
-
-# 8. Cleanup old templates (keep last 3)
+# Optional: cleanup old templates (keep last 3)
 templates=$(gcloud compute instance-templates list \
   --filter="name~my-template-" \
   --sort-by=~creationTimestamp \
   --format="value(name)" | tail -n +4)
-
 for t in $templates; do
   echo "Deleting old template: $t"
   gcloud compute instance-templates delete "$t" --quiet
 done
-
-echo "✅ Blue-Green Deployment complete!"

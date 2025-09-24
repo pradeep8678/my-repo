@@ -76,11 +76,10 @@ gcloud compute instance-groups managed set-autoscaling "$MIG" \
   --quiet
 
 # -------------------------
-# Detach old MIGs from backend safely
+# Detach all old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
-attached_migs=$(gcloud compute backend-services list-backends "$LB_BACKEND" \
-  --global --format="value(group)" || true)
+attached_migs=$(gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" || true)
 
 if [[ -n "$attached_migs" ]]; then
   for m in $attached_migs; do
@@ -100,8 +99,7 @@ if [[ -n "$attached_migs" ]]; then
 
     # Wait until MIG is fully detached
     echo "⏳ Waiting for $m to be detached..."
-    while gcloud compute backend-services list-backends "$LB_BACKEND" \
-          --global --format="value(group)" | grep -q "$m"; do
+    while gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" | grep -q "$m"; do
       sleep 5
     done
     echo "✅ MIG $m detached successfully."
@@ -111,7 +109,7 @@ else
 fi
 
 # -------------------------
-# Delete old MIGs safely
+# Delete all old MIGs
 # -------------------------
 echo "🗑 Deleting old MIGs..."
 old_migs=$(gcloud compute instance-groups managed list \
@@ -122,7 +120,10 @@ if [[ -n "$old_migs" ]]; then
   for m in $old_migs; do
     echo "🗑 Deleting old MIG: $m"
     set +e
-    gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
+    # Delete autoscaler first if exists
+    gcloud compute autoscalers delete "$m" --zone="$ZONE" --quiet || true
+    # Then delete MIG
+    gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet || true
     set -e
   done
 else
@@ -130,15 +131,23 @@ else
 fi
 
 # -------------------------
-# Attach new MIG to backend with max utilization
+# Attach new MIG to Load Balancer backend
 # -------------------------
 echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
 gcloud compute backend-services add-backend "$LB_BACKEND" \
   --instance-group="$MIG" \
   --instance-group-zone="$ZONE" \
+  --global \
+  --quiet
+
+# -------------------------
+# Update backend max utilization (60%)
+# -------------------------
+echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
+gcloud compute backend-services update "$LB_BACKEND" \
+  --global \
   --balancing-mode=UTILIZATION \
   --max-utilization="$MAX_UTILIZATION" \
-  --global \
   --quiet
 
 # -------------------------
@@ -154,7 +163,7 @@ if [[ -n "$templates" ]]; then
   for t in $templates; do
     echo "🗑 Deleting old template: $t"
     set +e
-    gcloud compute instance-templates delete "$t" --quiet
+    gcloud compute instance-templates delete "$t" --quiet || true
     set -e
   done
 else

@@ -76,6 +76,34 @@ gcloud compute instance-groups managed set-autoscaling "$MIG" \
   --quiet
 
 # -------------------------
+# Attach new MIG to Load Balancer backend (FIRST)
+# -------------------------
+echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
+gcloud compute backend-services add-backend "$LB_BACKEND" \
+  --instance-group="$MIG" \
+  --instance-group-zone="$ZONE" \
+  --global \
+  --quiet
+
+# -------------------------
+# Update backend max utilization (60%)
+# -------------------------
+echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
+gcloud compute backend-services update-backend "$LB_BACKEND" \
+  --instance-group="$MIG" \
+  --instance-group-zone="$ZONE" \
+  --global \
+  --balancing-mode=UTILIZATION \
+  --max-utilization="$MAX_UTILIZATION" \
+  --quiet
+
+# -------------------------
+# Grace period before removing old MIGs
+# -------------------------
+echo "⏳ Waiting 30s for new MIG $MIG to warm up and serve traffic..."
+sleep 30
+
+# -------------------------
 # Detach all old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
@@ -136,28 +164,6 @@ else
 fi
 
 # -------------------------
-# Attach new MIG to Load Balancer backend
-# -------------------------
-echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
-gcloud compute backend-services add-backend "$LB_BACKEND" \
-  --instance-group="$MIG" \
-  --instance-group-zone="$ZONE" \
-  --global \
-  --quiet
-
-# -------------------------
-# Update backend max utilization (60%)
-# -------------------------
-echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
-gcloud compute backend-services update-backend "$LB_BACKEND" \
-  --instance-group="$MIG" \
-  --instance-group-zone="$ZONE" \
-  --global \
-  --balancing-mode=UTILIZATION \
-  --max-utilization="$MAX_UTILIZATION" \
-  --quiet
-
-# -------------------------
 # Cleanup old instance templates (keep last 3)
 # -------------------------
 echo "🗑 Deleting old instance templates..."
@@ -177,4 +183,4 @@ else
   echo "No old templates to delete."
 fi
 
-echo "✅ Deployment completed: Blue-Green switch with autoscaling and 60% backend utilization done!"
+echo "✅ Deployment completed: Blue-Green switch with autoscaling and 60% backend utilization done without downtime!"

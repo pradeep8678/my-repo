@@ -60,13 +60,11 @@ gcloud compute instance-groups managed wait-until "$MIG" \
   --stable
 
 # -------------------------
-# First: Detach all old MIGs from backend
+# Detach all old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
-
 attached_migs=$(gcloud compute backend-services get-backend "$LB_BACKEND" \
-  --global \
-  --format="value(group)" || true)
+  --global --format="value(group)" || true)
 
 if [[ -n "$attached_migs" ]]; then
   for m in $attached_migs; do
@@ -75,7 +73,15 @@ if [[ -n "$attached_migs" ]]; then
       continue
     fi
 
-    echo "Detaching MIG: $m from backend $LB_BACKEND"
+    echo "🔧 Ensuring named port 'http:80' for old MIG $m before detaching"
+    set +e
+    gcloud compute instance-groups set-named-ports "$m" \
+      --named-ports=http:80 \
+      --zone="$ZONE" \
+      --quiet
+    set -e
+
+    echo "🛑 Detaching MIG: $m from backend $LB_BACKEND"
     set +e
     gcloud compute backend-services remove-backend "$LB_BACKEND" \
       --instance-group="$m" \
@@ -83,23 +89,30 @@ if [[ -n "$attached_migs" ]]; then
       --global \
       --quiet
     set -e
+
+    # Wait until MIG is fully detached
+    echo "⏳ Waiting for $m to be detached from backend..."
+    while gcloud compute backend-services get-backend "$LB_BACKEND" \
+          --global --format="value(group)" | grep -q "$m"; do
+      sleep 5
+    done
+    echo "✅ MIG $m detached successfully."
   done
 else
   echo "No old MIGs attached to backend."
 fi
 
 # -------------------------
-# Then: Delete old MIGs
+# Delete all old MIGs
 # -------------------------
 echo "🗑 Deleting old MIGs..."
-
 old_migs=$(gcloud compute instance-groups managed list \
   --format="value(name)" \
   --filter="name~my-mig-" | grep -v "$MIG" || true)
 
 if [[ -n "$old_migs" ]]; then
   for m in $old_migs; do
-    echo "Deleting old MIG: $m"
+    echo "🗑 Deleting old MIG: $m"
     set +e
     gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
     set -e
@@ -109,9 +122,9 @@ else
 fi
 
 # -------------------------
-# Finally: Attach new MIG to Load Balancer backend
+# Attach new MIG to Load Balancer backend
 # -------------------------
-echo "🔀 Attaching MIG $MIG to backend service $LB_BACKEND"
+echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
 gcloud compute backend-services add-backend "$LB_BACKEND" \
   --instance-group="$MIG" \
   --instance-group-zone="$ZONE" \
@@ -129,7 +142,7 @@ templates=$(gcloud compute instance-templates list \
 
 if [[ -n "$templates" ]]; then
   for t in $templates; do
-    echo "Deleting old template: $t"
+    echo "🗑 Deleting old template: $t"
     set +e
     gcloud compute instance-templates delete "$t" --quiet
     set -e

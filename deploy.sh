@@ -70,15 +70,22 @@ gcloud compute backend-services add-backend "$LB_BACKEND" \
   --quiet
 
 # -------------------------
-# Remove old MIGs safely
+# Remove all old MIGs safely (detach & delete)
 # -------------------------
-echo "🗑 Detaching and deleting old MIGs..."
-old_migs=$(gcloud compute instance-groups managed list \
-  --format="value(name)" \
-  --filter="name~my-mig-" | grep -v "$MIG" || true)
+echo "🗑 Detaching and deleting old MIGs from LB backend..."
 
-if [[ -n "$old_migs" ]]; then
-  for m in $old_migs; do
+# List all MIGs currently attached to the backend
+attached_migs=$(gcloud compute backend-services get-backend "$LB_BACKEND" \
+  --global \
+  --format="value(group)" || true)
+
+if [[ -n "$attached_migs" ]]; then
+  for m in $attached_migs; do
+    # Skip the new MIG
+    if [[ "$m" == *"$MIG"* ]]; then
+      continue
+    fi
+
     echo "Detaching old MIG: $m from LB backend $LB_BACKEND"
     set +e
     gcloud compute backend-services remove-backend "$LB_BACKEND" \
@@ -105,7 +112,7 @@ if [[ -n "$old_migs" ]]; then
     fi
   done
 else
-  echo "No old MIGs to detach/delete."
+  echo "No old MIGs attached to backend."
 fi
 
 # -------------------------

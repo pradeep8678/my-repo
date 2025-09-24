@@ -13,7 +13,7 @@ TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
 MIG="my-mig-$COMMIT_SHA-$(date +%s)"
 REGION="us-central1"
 ZONE="us-central1-c"
-LB_BACKEND="my-backend-service"
+LB_BACKEND="mig-green"
 
 echo "Creating instance template: $TEMPLATE"
 

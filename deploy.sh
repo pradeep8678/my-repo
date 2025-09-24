@@ -20,14 +20,14 @@ gcloud compute instance-templates create "$TEMPLATE" \
   --metadata-from-file=startup-script=script.sh \
   --quiet
 
-echo "Starting rolling update in MIG my-app to template: $TEMPLATE"
-gcloud compute instance-groups managed rolling-action start-update my-app \
+echo "Forcing MIG replacement with template: $TEMPLATE"
+gcloud compute instance-groups managed rolling-action replace my-app \
   --version=template="$TEMPLATE" \
   --zone=us-central1-c \
-  --type=proactive \
-  --max-surge=1 \
-  --max-unavailable=0 \
+  --max-unavailable=100% \
+  --max-surge=0 \
   --quiet
+
 
 # Optional: cleanup old templates (keep last 3)
 templates=$(gcloud compute instance-templates list \

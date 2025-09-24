@@ -76,7 +76,7 @@ gcloud compute instance-groups managed set-autoscaling "$MIG" \
   --quiet
 
 # -------------------------
-# Detach all old MIGs from backend safely
+# Detach old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
 attached_migs=$(gcloud compute backend-services list-backends "$LB_BACKEND" \
@@ -111,7 +111,7 @@ else
 fi
 
 # -------------------------
-# Delete all old MIGs
+# Delete old MIGs safely
 # -------------------------
 echo "🗑 Deleting old MIGs..."
 old_migs=$(gcloud compute instance-groups managed list \
@@ -130,22 +130,15 @@ else
 fi
 
 # -------------------------
-# Attach new MIG to Load Balancer backend
+# Attach new MIG to backend with max utilization
 # -------------------------
 echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
 gcloud compute backend-services add-backend "$LB_BACKEND" \
   --instance-group="$MIG" \
   --instance-group-zone="$ZONE" \
-  --global \
-  --quiet
-
-# -------------------------
-# Update backend max utilization (60%)
-# -------------------------
-echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
-gcloud compute backend-services update "$LB_BACKEND" \
-  --global \
+  --balancing-mode=UTILIZATION \
   --max-utilization="$MAX_UTILIZATION" \
+  --global \
   --quiet
 
 # -------------------------

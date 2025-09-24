@@ -20,11 +20,11 @@ fi
 # --- Authenticate Docker ---
 gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
-# --- Get COMMIT_SHA from metadata ---
+# --- Get COMMIT_SHA from VM metadata ---
 IMAGE_TAG=$(curl -sf -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/attributes/COMMIT_SHA)
 
-# Fallback to latest if empty
+# Fallback to latest
 if [[ -z "$IMAGE_TAG" ]]; then
   echo "WARNING: COMMIT_SHA not found, using 'latest'"
   IMAGE_TAG="latest"
@@ -32,11 +32,18 @@ fi
 
 # --- Pull and run Docker container ---
 docker pull asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$IMAGE_TAG
-
 docker rm -f simple-web-app || true
-
 docker run -d \
   --restart=always \
   --name simple-web-app \
   -p 80:8080 \
   asia-south1-docker.pkg.dev/psyched-option-421700/artifact-repo/simple-web-app:$IMAGE_TAG
+
+# --- Verify container is running ---
+sleep 5
+if ! curl -sf http://localhost:8080/ > /dev/null; then
+  echo "ERROR: Container not responding on port 8080!"
+  exit 1
+fi
+
+echo "✅ Docker container running with image tag: $IMAGE_TAG"

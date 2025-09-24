@@ -16,8 +16,8 @@ fi
 TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
 MIG="my-mig-$COMMIT_SHA-$(date +%s)"
 ZONE="us-central1-c"
-LB_BACKEND="my-app-backend-green"         # your existing backend service
-HEALTH_CHECK="my-app-hc"      # your existing health check
+LB_BACKEND="my-app-backend-green"  # your existing backend service
+HEALTH_CHECK="my-app-hc"           # your existing health check
 
 echo "✅ Creating instance template: $TEMPLATE"
 
@@ -68,10 +68,14 @@ old_migs=$(gcloud compute instance-groups managed list \
   --format="value(name)" \
   --filter="name~my-mig-" | grep -v "$MIG")
 
-for m in $old_migs; do
-  echo "Deleting old MIG: $m"
-  gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
-done
+if [[ -n "$old_migs" ]]; then
+  for m in $old_migs; do
+    echo "Deleting old MIG: $m"
+    gcloud compute instance-groups managed delete "$m" --zone="$ZONE" --quiet
+  done
+else
+  echo "No old MIGs to delete."
+fi
 
 # -------------------------
 # Cleanup old templates (keep last 3)
@@ -82,9 +86,13 @@ templates=$(gcloud compute instance-templates list \
   --sort-by=~creationTimestamp \
   --format="value(name)" | tail -n +4)
 
-for t in $templates; do
-  echo "Deleting old template: $t"
-  gcloud compute instance-templates delete "$t" --quiet
-done
+if [[ -n "$templates" ]]; then
+  for t in $templates; do
+    echo "Deleting old template: $t"
+    gcloud compute instance-templates delete "$t" --quiet
+  done
+else
+  echo "No old templates to delete."
+fi
 
 echo "✅ Deployment completed: Blue-Green switch done!"

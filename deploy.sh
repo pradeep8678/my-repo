@@ -45,6 +45,15 @@ gcloud compute instance-groups managed create "$MIG" \
   --initial-delay=30 \
   --quiet
 
+# -------------------------
+# Add named port mapping (http → 80)
+# -------------------------
+echo "🔧 Setting named port 'http:80' for MIG $MIG"
+gcloud compute instance-groups set-named-ports "$MIG" \
+  --named-ports=http:80 \
+  --zone="$ZONE" \
+  --quiet
+
 echo "⏳ Waiting for MIG $MIG to become healthy..."
 gcloud compute instance-groups managed wait-until "$MIG" \
   --zone="$ZONE" \

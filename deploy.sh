@@ -31,8 +31,8 @@ gcloud compute instance-groups managed set-instance-template my-app \
 echo "Force replacing all instances in MIG my-app"
 gcloud compute instance-groups managed rolling-action replace my-app \
   --zone=us-central1-c \
-  --max-unavailable=100% \
-  --max-surge=0 \
+  --max-unavailable=0% \
+  --max-surge=1 \
   --quiet
 
 # Cleanup old templates (keep last 3)

@@ -16,8 +16,8 @@ fi
 TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
 MIG="my-mig-$COMMIT_SHA-$(date +%s)"
 ZONE="us-central1-c"
-LB_BACKEND="my-app-backend-green"  # existing backend service
-HEALTH_CHECK="my-app-hc"           # existing health check
+LB_BACKEND="my-app-backend-green"
+HEALTH_CHECK="my-app-hc"
 
 echo "✅ Creating instance template: $TEMPLATE"
 
@@ -54,13 +54,23 @@ gcloud compute instance-groups set-named-ports "$MIG" \
   --zone="$ZONE" \
   --quiet
 
+# -------------------------
+# Add autoscaling to new MIG
+# -------------------------
+echo "📈 Setting autoscaling for MIG $MIG (Target CPU 60%)"
+gcloud compute instance-groups managed set-autoscaling "$MIG" \
+  --max-num-replicas=5 \
+  --target-cpu-utilization=0.6 \
+  --zone="$ZONE" \
+  --quiet
+
 echo "⏳ Waiting for MIG $MIG to become healthy..."
 gcloud compute instance-groups managed wait-until "$MIG" \
   --zone="$ZONE" \
   --stable
 
 # -------------------------
-# Detach all old MIGs from backend safely
+# Detach all old MIGs including mig-green
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
 attached_migs=$(gcloud compute backend-services list-backends "$LB_BACKEND" \
@@ -95,12 +105,12 @@ else
 fi
 
 # -------------------------
-# Delete all old MIGs
+# Delete all old MIGs including mig-green
 # -------------------------
 echo "🗑 Deleting old MIGs..."
 old_migs=$(gcloud compute instance-groups managed list \
   --format="value(name)" \
-  --filter="name~my-mig-" | grep -v "$MIG" || true)
+  --filter="name~my-mig-|name:mig-green" | grep -v "$MIG" || true)
 
 if [[ -n "$old_migs" ]]; then
   for m in $old_migs; do
@@ -114,12 +124,13 @@ else
 fi
 
 # -------------------------
-# Attach new MIG to Load Balancer backend
+# Attach new MIG to Load Balancer backend with max backend utilization
 # -------------------------
 echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
 gcloud compute backend-services add-backend "$LB_BACKEND" \
   --instance-group="$MIG" \
   --instance-group-zone="$ZONE" \
+  --max-backend-utilization=0.8 \
   --global \
   --quiet
 

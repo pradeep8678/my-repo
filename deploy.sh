@@ -16,8 +16,12 @@ fi
 TEMPLATE="my-template-$COMMIT_SHA-$(date +%s)"
 MIG="my-mig-$COMMIT_SHA-$(date +%s)"
 ZONE="us-central1-c"
-LB_BACKEND="my-app-backend-green"
-HEALTH_CHECK="my-app-hc"
+LB_BACKEND="my-app-backend-green"  # existing backend service
+HEALTH_CHECK="my-app-hc"           # existing health check
+
+MIN_INSTANCES=1
+MAX_INSTANCES=3
+MAX_UTILIZATION=0.6  # 60% for LB backend
 
 echo "✅ Creating instance template: $TEMPLATE"
 
@@ -38,7 +42,7 @@ echo "✅ Creating new Managed Instance Group: $MIG"
 # -------------------------
 gcloud compute instance-groups managed create "$MIG" \
   --base-instance-name="$MIG" \
-  --size=1 \
+  --size="$MIN_INSTANCES" \
   --template="$TEMPLATE" \
   --zone="$ZONE" \
   --health-check="$HEALTH_CHECK" \
@@ -54,23 +58,34 @@ gcloud compute instance-groups set-named-ports "$MIG" \
   --zone="$ZONE" \
   --quiet
 
-# -------------------------
-# Add autoscaling to new MIG
-# -------------------------
-echo "📈 Setting autoscaling for MIG $MIG (Target CPU 60%)"
-gcloud compute instance-groups managed set-autoscaling "$MIG" \
-  --max-num-replicas=5 \
-  --target-cpu-utilization=0.6 \
-  --zone="$ZONE" \
-  --quiet
-
 echo "⏳ Waiting for MIG $MIG to become healthy..."
 gcloud compute instance-groups managed wait-until "$MIG" \
   --zone="$ZONE" \
   --stable
 
 # -------------------------
-# Detach all old MIGs including mig-green
+# Enable autoscaling for the new MIG
+# -------------------------
+echo "⚙️ Setting autoscaling for MIG $MIG (min: $MIN_INSTANCES, max: $MAX_INSTANCES)"
+gcloud compute instance-groups managed set-autoscaling "$MIG" \
+  --zone="$ZONE" \
+  --min-num-replicas="$MIN_INSTANCES" \
+  --max-num-replicas="$MAX_INSTANCES" \
+  --target-cpu-utilization=0.6 \
+  --cool-down-period=60 \
+  --quiet
+
+# -------------------------
+# Set max backend utilization for LB
+# -------------------------
+echo "🔧 Setting max backend utilization ($MAX_UTILIZATION) for LB backend $LB_BACKEND"
+gcloud compute backend-services update "$LB_BACKEND" \
+  --global \
+  --max-utilization="$MAX_UTILIZATION" \
+  --quiet
+
+# -------------------------
+# Detach all old MIGs from backend safely
 # -------------------------
 echo "🗑 Detaching old MIGs from LB backend..."
 attached_migs=$(gcloud compute backend-services list-backends "$LB_BACKEND" \
@@ -105,12 +120,12 @@ else
 fi
 
 # -------------------------
-# Delete all old MIGs including mig-green
+# Delete all old MIGs
 # -------------------------
 echo "🗑 Deleting old MIGs..."
 old_migs=$(gcloud compute instance-groups managed list \
   --format="value(name)" \
-  --filter="name~my-mig-|name:mig-green" | grep -v "$MIG" || true)
+  --filter="name~my-mig-" | grep -v "$MIG" || true)
 
 if [[ -n "$old_migs" ]]; then
   for m in $old_migs; do
@@ -124,13 +139,12 @@ else
 fi
 
 # -------------------------
-# Attach new MIG to Load Balancer backend with max backend utilization
+# Attach new MIG to Load Balancer backend
 # -------------------------
 echo "🔀 Attaching new MIG $MIG to backend service $LB_BACKEND"
 gcloud compute backend-services add-backend "$LB_BACKEND" \
   --instance-group="$MIG" \
   --instance-group-zone="$ZONE" \
-  --max-backend-utilization=0.8 \
   --global \
   --quiet
 
@@ -154,4 +168,4 @@ else
   echo "No old templates to delete."
 fi
 
-echo "✅ Deployment completed: Blue-Green switch done!"
+echo "✅ Deployment completed: Blue-Green switch with autoscaling done!"

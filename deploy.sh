@@ -78,7 +78,7 @@ while [[ $elapsed -lt $timeout ]]; do
     break
   fi
 
-  echo "⏳ Still waiting... ($elapsed/$timeout seconds)"
+
   sleep $interval
   elapsed=$((elapsed + interval))
 done

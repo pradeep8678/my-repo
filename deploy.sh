@@ -70,9 +70,13 @@ for MIG in "$BLUE_MIG" "$GREEN_MIG"; do
 done
 
 # -------------------------
-# Detect active MIG
+# Detect active MIG safely
 # -------------------------
-active_mig=$(gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" | grep -E "mig-blue|mig-green" | xargs basename || true)
+attached_migs=$(gcloud compute backend-services describe "$LB_BACKEND" --global --format="value(backends.group)" || true)
+active_mig=""
+if [[ -n "$attached_migs" ]]; then
+  active_mig=$(echo "$attached_migs" | grep -E "mig-blue|mig-green" | head -n1 | xargs -r basename)
+fi
 
 if [[ "$active_mig" == "$BLUE_MIG" ]]; then
   new_mig="$GREEN_MIG"
@@ -92,7 +96,7 @@ echo "🎯 Deploying to inactive MIG: $new_mig"
 echo "🔄 Updating $new_mig with template $TEMPLATE"
 gcloud compute instance-groups managed rolling-action replace "$new_mig" \
   --zone="$ZONE" \
-  --replacement-method=RECREATE \
+  --replacement-method=recreate \
   --max-unavailable=0 \
   --max-surge=1 \
   --quiet

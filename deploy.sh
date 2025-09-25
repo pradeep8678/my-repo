@@ -58,10 +58,38 @@ gcloud compute instance-groups set-named-ports "$MIG" \
   --zone="$ZONE" \
   --quiet
 
-echo "⏳ Waiting for MIG $MIG to become healthy..."
-gcloud compute instance-groups managed wait-until "$MIG" \
-  --zone="$ZONE" \
-  --stable
+# -------------------------
+# Wait for MIG health with timeout & rollback
+# -------------------------
+echo "⏳ Waiting for MIG $MIG to become healthy (max 300s)..."
+timeout=300   # 5 minutes
+interval=15
+elapsed=0
+healthy=false
+
+while [[ $elapsed -lt $timeout ]]; do
+  status=$(gcloud compute instance-groups managed list-instances "$MIG" \
+    --zone="$ZONE" \
+    --format="value(instanceStatus)" || true)
+
+  if [[ -n "$status" ]] && ! echo "$status" | grep -qv "RUNNING"; then
+    echo "✅ MIG $MIG instances are RUNNING."
+    healthy=true
+    break
+  fi
+
+  echo "⏳ Still waiting... ($elapsed/$timeout seconds)"
+  sleep $interval
+  elapsed=$((elapsed + interval))
+done
+
+if [[ "$healthy" != "true" ]]; then
+  echo "❌ ERROR: MIG $MIG failed to become healthy within $timeout seconds."
+  echo "🗑 Cleaning up broken MIG + template. Keeping old version serving traffic."
+  gcloud compute instance-groups managed delete "$MIG" --zone="$ZONE" --quiet || true
+  gcloud compute instance-templates delete "$TEMPLATE" --quiet || true
+  exit 1
+fi
 
 # -------------------------
 # Enable autoscaling for the new MIG

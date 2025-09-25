@@ -34,12 +34,6 @@ gcloud compute instance-templates create "$TEMPLATE" \
   --metadata=COMMIT_SHA="$COMMIT_SHA" \
   --metadata-from-file=startup-script=script.sh \
   --quiet
-
-echo "✅ Creating new Managed Instance Group: $MIG"
-
-# -------------------------
-# Create new MIG with health check
-# -------------------------
 gcloud compute instance-groups managed create "$MIG" \
   --base-instance-name="$MIG" \
   --size="$MIN_INSTANCES" \

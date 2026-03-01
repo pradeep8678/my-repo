@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# --- Install Docker if not present ---
+# --- Install Docker if not presents ---
 if ! command -v docker >/dev/null 2>&1; then
   apt-get update -y
   apt-get install -y ca-certificates curl gnupg lsb-release

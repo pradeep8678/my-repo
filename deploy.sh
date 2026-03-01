@@ -2,7 +2,7 @@
 set -e
 
 # -------------------------
-# Commit SHA from Cloud Build
+# Commit SHA from Cloud Builds
 # -------------------------
 COMMIT_SHA="$1"
 if [[ -z "$COMMIT_SHA" ]]; then

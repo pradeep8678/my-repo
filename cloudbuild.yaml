@@ -2,7 +2,7 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # Step 1: Build Docker image with commit SHA tag
+  # Step 1: Build Docker image with commit SHA tags
   - name: 'gcr.io/cloud-builders/docker'
     args:
       [
